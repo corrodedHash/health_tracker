@@ -9,9 +9,9 @@
 //! Phase 1 item 5.10 (see `MIGRATION.md`'s "SQLite test strategy").
 
 use health_core::{
-    ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample,
-    NewApiToken, NewExerciseSession, NewOidcState, NewHeartrateSamples,
-    OidcState, RunningSession, User, WeightSession,
+    ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample, NewApiToken,
+    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, RunningSession, User,
+    WeightSession,
 };
 use uuid::Uuid;
 
@@ -58,30 +58,18 @@ pub trait WeightRepository: Send + Sync {
     /// Attach a weight-exercise child row to session `id`. The parent
     /// row's `kind` must be `Weight`; otherwise returns
     /// [`DbError::KindMismatch`].
-    async fn insert(
-        &self,
-        session_id: Uuid,
-        row: &WeightSession,
-    ) -> Result<(), DbError>;
+    async fn insert(&self, session_id: Uuid, row: &WeightSession) -> Result<(), DbError>;
 
     /// Fetch the child row for `session_id`, or [`DbError::NotFound`].
-    async fn get_by_session(&self, session_id: Uuid)
-        -> Result<WeightSession, DbError>;
+    async fn get_by_session(&self, session_id: Uuid) -> Result<WeightSession, DbError>;
 }
 
 /// `core_exercises` rows.
 #[async_trait::async_trait]
 pub trait CoreRepository: Send + Sync {
-    async fn insert(
-        &self,
-        session_id: Uuid,
-        row: &CoreSession,
-    ) -> Result<(), DbError>;
+    async fn insert(&self, session_id: Uuid, row: &CoreSession) -> Result<(), DbError>;
 
-    async fn get_by_session(
-        &self,
-        session_id: Uuid,
-    ) -> Result<CoreSession, DbError>;
+    async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError>;
 }
 
 /// `running_sessions` rows.
@@ -89,18 +77,11 @@ pub trait CoreRepository: Send + Sync {
 pub trait RunningRepository: Send + Sync {
     /// Insert a running child row. Setting `gpx_data` is optional
     /// (some runs are uploaded without a GPX trace).
-    async fn insert(
-        &self,
-        session_id: Uuid,
-        row: &RunningSession,
-    ) -> Result<(), DbError>;
+    async fn insert(&self, session_id: Uuid, row: &RunningSession) -> Result<(), DbError>;
 
     /// Child row without the `gpx_data` blob; use [`Self::get_gpx`]
     /// for the bytes.
-    async fn get_by_session(
-        &self,
-        session_id: Uuid,
-    ) -> Result<RunningSession, DbError>;
+    async fn get_by_session(&self, session_id: Uuid) -> Result<RunningSession, DbError>;
 
     /// Raw GPX bytes for the session (may be `None`).
     async fn get_gpx(&self, session_id: Uuid) -> Result<Option<Vec<u8>>, DbError>;
@@ -113,16 +94,10 @@ pub trait HeartrateRepository: Send + Sync {
     /// offset_secs) DO NOTHING` so re-uploading a watch export is
     /// idempotent. Returns the number of rows actually inserted
     /// (i.e. newly seen offsets).
-    async fn insert_bulk(
-        &self,
-        samples: &NewHeartrateSamples,
-    ) -> Result<u64, DbError>;
+    async fn insert_bulk(&self, samples: &NewHeartrateSamples) -> Result<u64, DbError>;
 
     /// All samples for a session, ordered by `offset_secs`.
-    async fn list_for_session(
-        &self,
-        session_id: Uuid,
-    ) -> Result<Vec<HeartrateSample>, DbError>;
+    async fn list_for_session(&self, session_id: Uuid) -> Result<Vec<HeartrateSample>, DbError>;
 }
 
 /// `users` — OIDC `sub` claim upsert.

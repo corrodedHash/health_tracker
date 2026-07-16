@@ -27,7 +27,7 @@ pub mod repo;
 pub mod traits;
 
 pub use error::DbError;
-pub use migrate::{run_migrations, MIGRATIONS_DIR};
+pub use migrate::{MIGRATIONS_DIR, run_migrations};
 pub use repo::SqlxRepository;
 pub use traits::{
     ApiTokenRepository, CoreRepository, HeartrateRepository, OidcStateRepository,

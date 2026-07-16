@@ -4,8 +4,8 @@
 
 use std::path::Path;
 
-use sqlx::migrate::Migrator;
 use sqlx::PgPool;
+use sqlx::migrate::Migrator;
 
 use crate::error::DbError;
 

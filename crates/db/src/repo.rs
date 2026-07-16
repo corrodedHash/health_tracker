@@ -15,14 +15,14 @@
 use std::time::Duration;
 
 use health_core::{
-    ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample,
-    NewApiToken, NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState,
-    RunningSession, User, WeightSession,
+    ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample, NewApiToken,
+    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, RunningSession, User,
+    WeightSession,
 };
 use rand::RngCore;
 use sha2::{Digest, Sha256};
-use sqlx::postgres::types::PgInterval;
 use sqlx::PgPool;
+use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
 use crate::error::DbError;
@@ -253,10 +253,12 @@ fn interval_to_std(i: PgInterval) -> Result<Duration, DbError> {
             "interval has non-zero months/days ({i:?}) — cannot represent as std::time::Duration"
         )));
     }
-    let micros: u128 = i
-        .microseconds
-        .try_into()
-        .map_err(|_| DbError::Invalid(format!("interval microseconds negative: {}", i.microseconds)))?;
+    let micros: u128 = i.microseconds.try_into().map_err(|_| {
+        DbError::Invalid(format!(
+            "interval microseconds negative: {}",
+            i.microseconds
+        ))
+    })?;
     Ok(Duration::from_micros(micros.try_into().unwrap_or(u64::MAX)))
 }
 
@@ -294,83 +296,99 @@ impl SessionsRepository for SqlxRepository {
         // branch on the four combos to keep the bind order correct
         // rather than emit a string-frog of optional clauses.
         let rows: Vec<SessionRow> = match (kind, from, to) {
-            (None, None, None) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+            (None, None, None) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .fetch_all(&self.pool)
-            .await?,
-            (Some(k), None, None) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (Some(k), None, None) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(k.as_str())
-            .fetch_all(&self.pool)
-            .await?,
-            (None, Some(f), None) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(k.as_str())
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (None, Some(f), None) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at >= $2 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(f)
-            .fetch_all(&self.pool)
-            .await?,
-            (None, None, Some(t)) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(f)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (None, None, Some(t)) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at <= $2 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(t)
-            .fetch_all(&self.pool)
-            .await?,
-            (Some(k), Some(f), None) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(t)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (Some(k), Some(f), None) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(k.as_str())
-            .bind(f)
-            .fetch_all(&self.pool)
-            .await?,
-            (Some(k), None, Some(t)) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(k.as_str())
+                .bind(f)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (Some(k), None, Some(t)) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(k.as_str())
-            .bind(t)
-            .fetch_all(&self.pool)
-            .await?,
-            (None, Some(f), Some(t)) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(k.as_str())
+                .bind(t)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (None, Some(f), Some(t)) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(f)
-            .bind(t)
-            .fetch_all(&self.pool)
-            .await?,
-            (Some(k), Some(f), Some(t)) => sqlx::query_as::<_, SessionRow>(
-                "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+                )
+                .bind(user_id)
+                .bind(f)
+                .bind(t)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (Some(k), Some(f), Some(t)) => {
+                sqlx::query_as::<_, SessionRow>(
+                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions \
                  WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
                  ORDER BY started_at DESC",
-            )
-            .bind(user_id)
-            .bind(k.as_str())
-            .bind(f)
-            .bind(t)
-            .fetch_all(&self.pool)
-            .await?,
+                )
+                .bind(user_id)
+                .bind(k.as_str())
+                .bind(f)
+                .bind(t)
+                .fetch_all(&self.pool)
+                .await?
+            }
         };
         rows.into_iter().map(TryFrom::try_from).collect()
     }
@@ -622,15 +640,16 @@ impl UsersRepository for SqlxRepository {
     }
 
     async fn get(&self, id: Uuid) -> Result<User, DbError> {
-        let row: UserRow =
-            sqlx::query_as::<_, UserRow>("SELECT id, external_id, display_name, created_at FROM users WHERE id = $1")
-                .bind(id)
-                .fetch_one(&self.pool)
-                .await
-                .map_err(|e| match e {
-                    sqlx::Error::RowNotFound => DbError::NotFound,
-                    other => map_err(other),
-                })?;
+        let row: UserRow = sqlx::query_as::<_, UserRow>(
+            "SELECT id, external_id, display_name, created_at FROM users WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => DbError::NotFound,
+            other => map_err(other),
+        })?;
         Ok(row.into())
     }
 }
@@ -762,11 +781,10 @@ async fn enforce_kind(
     session_id: Uuid,
     expected: ExerciseKind,
 ) -> Result<(), DbError> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT kind FROM exercise_sessions WHERE id = $1")
-            .bind(session_id)
-            .fetch_optional(&mut **tx)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT kind FROM exercise_sessions WHERE id = $1")
+        .bind(session_id)
+        .fetch_optional(&mut **tx)
+        .await?;
     match row {
         None => Err(DbError::NotFound),
         Some((kind,)) if kind == expected.as_str() => Ok(()),
