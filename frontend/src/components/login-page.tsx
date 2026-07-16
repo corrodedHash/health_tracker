@@ -5,7 +5,7 @@ export function LoginPage() {
   const beginOidc = () => {
     const resumeToken = crypto.randomUUID();
     localStorage.setItem(resumeToken, "");
-    window.location.assign(`/api/oidc?resume_token=${resumeToken}`);
+    window.location.assign(`/auth/login?resume_token=${resumeToken}`);
   };
 
   return (

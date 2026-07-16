@@ -16,14 +16,22 @@ pub struct CallbackParams {
     state: String,
 }
 
-pub async fn login(State(state): State<AppState>) -> Result<Response, WebError> {
+#[derive(Debug, Deserialize)]
+pub struct LoginParams {
+    pub resume_token: Option<String>,
+}
+
+pub async fn login(
+    State(state): State<AppState>,
+    Query(params): Query<LoginParams>,
+) -> Result<Response, WebError> {
     let bundle = state
         .oidc_bundle
         .as_deref()
         .ok_or_else(|| WebError::Internal(anyhow::anyhow!("OIDC not configured")))?;
 
-    let request =
-        flow::start_login(bundle, None).map_err(|e| WebError::Internal(anyhow::anyhow!("{e}")))?;
+    let request = flow::start_login(bundle, params.resume_token)
+        .map_err(|e| WebError::Internal(anyhow::anyhow!("{e}")))?;
 
     let repo = SqlxRepository::new(state.pool.clone());
     repo.insert(&request.state).await?;

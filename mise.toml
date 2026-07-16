@@ -18,6 +18,7 @@ run = "cargo build --release"
 
 [tasks.run-web]
 description = "Run the web server (pass args after --)"
+env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e" }
 run = "cargo run -p health-web --"
 
 [tasks.run-bot]
@@ -50,6 +51,7 @@ run = "pnpm --dir frontend install"
 
 [tasks.frontend-dev]
 description = "Start the frontend dev server"
+depends = ["frontend-install"]
 run = "pnpm --dir frontend dev"
 
 [tasks.frontend-build]
@@ -59,6 +61,21 @@ run = "pnpm --dir frontend build"
 [tasks.frontend-lint]
 description = "Lint the frontend"
 run = "pnpm --dir frontend lint"
+
+[tasks.db-up]
+description = "Start a PostgreSQL container for local development"
+run = """
+docker rm -f ht-postgres 2>/dev/null || true
+docker run -d --name ht-postgres \
+  -e POSTGRES_USER=health \
+  -e POSTGRES_PASSWORD=health \
+  -e POSTGRES_DB=health \
+  -p 5432:5432 postgres:16
+"""
+
+[tasks.db-down]
+description = "Stop the PostgreSQL container"
+run = "docker rm -f ht-postgres 2>/dev/null || true"
 
 [tasks.changelog]
 description = "Preview the bumped version and notes for the pending (unreleased) commits"

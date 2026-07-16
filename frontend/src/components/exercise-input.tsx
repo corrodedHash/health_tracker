@@ -19,7 +19,7 @@ export function ExerciseInput() {
   const startOidcResume = (formData: URLSearchParams) => {
     const resumeToken = crypto.randomUUID();
     localStorage.setItem(resumeToken, formData.toString());
-    window.location.assign(`/api/oidc?resume_token=${resumeToken}`);
+    window.location.assign(`/auth/login?resume_token=${resumeToken}`);
   };
 
   const mutation = useMutation({
