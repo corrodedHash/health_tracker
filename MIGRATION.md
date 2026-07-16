@@ -11,8 +11,9 @@
 - `cargo test -p health-db` — **13/13 Postgres integration tests pass** (5.10)
 - Workspace skeleton with five crates (`core`, `db`, `auth`, `web`, `bot`)
   wired up and compiling. `core` is implemented; `db` has its 8 repository
-  traits + a Postgres `SqlxRepository` impl + integration tests; the others
-  are stubs.
+  traits + a Postgres `SqlxRepository` impl + integration tests; `auth`
+  has OIDC PKCE flow + `AuthProvider` trait + session cookie logic;
+  `web` and `bot` are stubs.
 - All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done)
   in **file-based format** (sqlx 0.8 requires `.up.sql`/`.down.sql` files,
   not subdirectories).
@@ -216,7 +217,15 @@ health_tracker/
 │   │       │                      + row structs (FromRow) + interval helpers
 │   │       │                      + enforce_kind tx guard + sha256 token issue
 │   │       └── migrate.rs         run_migrations(PgPool) from MIGRATIONS_DIR
-│   ├── auth/                       🚧 STUB: only Cargo.toml + doc-comment lib.rs
+│   ├── auth/                       ✅ OIDC PKCE flow + AuthProvider trait
+│   │   ├── Cargo.toml                + session cookies (5.12–5.16 done)
+│   │   └── src/
+│   │       ├── lib.rs              AuthProvider trait + MockAuthProvider
+│   │       ├── oidc.rs             setup_oidc_client, OidcConfig,
+│   │       │                       OidcClientBundle, start_pkce_flow
+│   │       ├── flow.rs             start_login, finish_login
+│   │       │                       (panic → LoginFinishError::MissingIdToken)
+│   │       └── session.rs          create/parse/delete signed session cookies
 │   ├── web/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 │   └── bot/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 ├── migrations/                     ✅ 8 Postgres migrations present
@@ -385,21 +394,21 @@ the reference repo to lift from where applicable.
 
 ### Phase 2 — auth (unblocks web)
 
-- [ ] **5.12** Port `setup_oidc_client` from
+- [x] **5.12** Port `setup_oidc_client` from
       `workout_tracker/src/oidc.rs:65-97` into
       `crates/auth/src/oidc.rs`. Keep the discovery+PKCE flow, swap
       actix types for plain reqwest (already its HTTP client).
-- [ ] **5.13** Port `oidc_init` (`workout_tracker/src/oidc.rs:124-154`)
+- [x] **5.13** Port `oidc_init` (`workout_tracker/src/oidc.rs:124-154`)
       → `crates/auth/src/flow.rs::start_login`. Returns auth URL +
       `NewOidcState` to be persisted by the caller.
-- [ ] **5.14** Port `oidc_callback`
+- [x] **5.14** Port `oidc_callback`
       (`workout_tracker/src/oidc.rs:194-253`) →
       `flow.rs::finish_login`. Takes the code + the fetched
       `OidcState`; returns the verified `sub` claim; **the panic at
-      `oidc.rs:223` becomes `OidcCallbackError::MissingIdToken`**.
-- [ ] **5.15** Define `AuthProvider` trait per design §Testability,
+      `oidc.rs:223` becomes `LoginFinishError::MissingIdToken`**.
+- [x] **5.15** Define `AuthProvider` trait per design §Testability,
       put the impl behind it. Mock impl returns canned claims.
-- [ ] **5.16** Session token logic: after `finish_login`, web stamps a
+- [x] **5.16** Session token logic: after `finish_login`, web stamps a
       signed session cookie. Keep token validation in `auth`, not
       `web`.
 
@@ -516,8 +525,8 @@ needs at least Rust 1.85 stable, but some parent repos required nightly.
 
 ## 8. Where to start next session
 
-Phase 1 items 5.1–5.10 are done. Next up: **Phase 2 (auth)**, starting
-with **5.12** — port `setup_oidc_client` from `workout_tracker/src/oidc.rs`
-into `crates/auth/src/oidc.rs`. See §"Adaptation needed when porting
-`oidc.rs`" above for the actix→axum swap list (especially item 4: the
-`panic!` at `oidc.rs:223` becomes `OidcCallbackError::MissingIdToken`).
+Phase 1 items 5.1–5.10 and Phase 2 items 5.12–5.16 are done. Next up:
+**Phase 3 (web)**, starting with **5.17** — `crates/web/src/main.rs`:
+axum server setup, tracing init, config loading (env-over-defaults via
+`config` crate), run SQLx migrations on startup. Then 5.18–5.22 for
+routes, middleware, static serving, and router-level tests.
