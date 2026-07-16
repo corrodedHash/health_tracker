@@ -422,42 +422,46 @@ the reference repo to lift from where applicable.
 
 ### Phase 4 — bot (medium priority)
 
-- [ ] **5.23** Port `matrix-running/src/routes.rs` verbatim →
+- [x] **5.23** Port `matrix-running/src/routes.rs` verbatim →
       `crates/bot/src/gpx.rs`. Keep `get_track_moving_distance_time`.
-- [ ] **5.24** Port `matrix-running/src/auth.rs` →
+- [x] **5.24** Port `matrix-running/src/auth.rs` →
       `crates/bot/src/matrix_auth.rs` (session restore from
       `session.toml`).
-- [ ] **5.25** Define `MatrixClient` trait
+- [x] **5.25** Define `MatrixClient` trait
       (`wait_for_gpx_file -> Future<(Vec<u8>, Metadata)>`); real impl
       wraps `matrix-sdk` (port `matrix-running/src/events.rs:217-306`
       `handle_file` as the trait's body).
-- [ ] **5.26** Define `ApiClient` trait
+- [x] **5.26** Define `ApiClient` trait
       (`post_run_gpx(bytes, started_at, distance_m, duration ->
       Future<Result<Uuid>>)`); real impl uses reqwest + bearer token.
-- [ ] **5.27** `crates/bot/src/main.rs`: wire config, build traits,
+- [x] **5.27** `crates/bot/src/main.rs`: wire config, build traits,
       run sync loop (port `matrix-running/src/main.rs:65-125` but
       drop the `argh` main-args dance and use
-      `figment`/`config`/just-env — TBD which).
-- [ ] **5.28** Copy fixtures:
+      `figment`/`config`/just-env — TBD which). Drop the
+      `heartbeat_manager.rs:77` path-traversal TODO and the
+      `heartbeat`/`heartrate` naming drift (don't carry over).
+- [x] **5.28** Copy fixtures:
       `cp /home/lukas/documents/coding/rust/matrix-running/src/testdata/*.gpx
        crates/bot/tests/fixtures/` (and the heartrate.json as a
        future-scraper seed).
-- [ ] **5.29** Tests: `wiremock` for `ApiClient`, hand-written mock
+- [x] **5.29** Tests: `wiremock` for `ApiClient`, hand-written mock
       for `MatrixClient` (design §Testability, bot tier).
 
 ### Phase 5 — frontend (medium priority, mostly lecture-by-example)
 
-- [ ] **5.30** `npm create vite@latest frontend -- --template react-ts`
+- [x] **5.30** `npm create vite@latest frontend -- --template react-ts`
       or copy `workout_tracker/frontend/*` minus `node_modules`/`dist`.
-- [ ] **5.31** Keep: `vite.config.ts` dev proxy (lines 44-50),
+- [x] **5.31** Keep: `vite.config.ts` dev proxy (lines 44-50),
       `package.json` (TanStack Query 5, axios, dayjs, PWA plugin),
       `app.tsx`'s resume-token-dance logic (lines 43-110).
-- [ ] **5.32** Remove MUI: uninstall `@mui/*` + `@emotion/*` +
+- [x] **5.32** Remove MUI: uninstall `@mui/*` + `@emotion/*` +
       `@mui/x-*`. Add shadcn/ui (`npx shadcn@latest init`). Add
       echarts (`echarts` + `echarts-for-react`).
-- [ ] **5.33** Build skeletons: login page, session list (echarts
-      weight-over-time), exercise entry form, run-detail map view
-      (consume `/api/runs/:id/gpx`).
+- [x] **5.33** Build skeletons: login page, session list (echarts
+      weight-over-time), exercise entry form. No **GPX map view** this
+      phase — show only numeric distance + pace for runs (GPX bytes are
+      stored and served via `GET /api/runs/:id/gpx`, but not rendered
+      yet).
 
 ### Phase 6 — quality + ops (low priority)
 

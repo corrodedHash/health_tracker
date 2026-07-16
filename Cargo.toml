@@ -34,14 +34,21 @@ tracing       = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Runtime
-tokio         = { version = "1.45", features = ["macros", "rt-multi-thread", "signal"] }
+tokio         = { version = "1.45", features = ["macros", "rt-multi-thread", "signal", "sync", "fs"] }
 async-trait   = "0.1"
+
+# Config
+config        = "0.14"
+
+# Test
+mockall       = "0.13"
+wiremock      = "0.6"
 
 # Web / API
 axum          = { version = "0.8", features = ["macros"] }
 tower         = "0.5"
 tower-http    = { version = "0.6", features = ["fs", "trace", "cors"] }
-reqwest       = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest       = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
 
 
 # OIDC
