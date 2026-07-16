@@ -89,3 +89,8 @@ export async function getRunningSummary(
 export async function deleteSession(sessionId: string): Promise<void> {
   await axios.delete(`/api/exercise-sessions/${sessionId}`);
 }
+
+export async function checkAuth(): Promise<boolean> {
+  const resp = await axios.get<{ authenticated: boolean }>("/auth/status");
+  return resp.data.authenticated;
+}

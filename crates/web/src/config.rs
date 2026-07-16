@@ -10,6 +10,12 @@ pub struct Config {
     pub oidc: Option<OidcConfig>,
     #[serde(default)]
     pub dev_auto_login: bool,
+    #[serde(default = "default_cookie_secure")]
+    pub cookie_secure: bool,
+}
+
+fn default_cookie_secure() -> bool {
+    true
 }
 
 fn default_listen_addr() -> String {

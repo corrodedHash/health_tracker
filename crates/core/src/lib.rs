@@ -24,6 +24,7 @@ pub mod duration_ext;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 pub use chrono;
@@ -38,7 +39,7 @@ pub use uuid;
 ///
 /// Mirrors the `kind` column on `exercise_sessions` and the child-table
 /// layout described in `DESIGN.md`. Order matters only for `Default`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ExerciseKind {
     Weight,
@@ -88,12 +89,14 @@ pub struct UnknownExerciseKind(pub String);
 
 /// One row of the `exercise_sessions` parent table — the cross-cutting
 /// representation of any workout, regardless of type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ExerciseSession {
     pub id: Uuid,
     pub user_id: Uuid,
     pub kind: ExerciseKind,
     pub started_at: DateTime<Utc>,
+    #[serde(rename = "duration_secs", with = "crate::duration_ext::serde_duration_secs")]
+    #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -103,10 +106,12 @@ pub struct ExerciseSession {
 ///
 /// `id`, `user_id` and `created_at` are server-assigned; they are filled in
 /// by the repository on insert and never supplied by the client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct NewExerciseSession {
     pub kind: ExerciseKind,
     pub started_at: DateTime<Utc>,
+    #[serde(rename = "duration_secs", with = "crate::duration_ext::serde_duration_secs")]
+    #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,
 }
@@ -183,7 +188,7 @@ pub struct User {
 /// A long-lived bearer token issued via the web UI for machine clients
 /// (e.g. the Matrix bot). The hashed form is what we store; the cleartext
 /// form only exists transiently at creation time.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ApiToken {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -197,7 +202,7 @@ pub struct ApiToken {
 
 /// Returned once at creation time — `token` is the only moment the
 /// cleartext is visible to the caller.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct NewApiToken {
     pub id: Uuid,
     pub user_id: Uuid,

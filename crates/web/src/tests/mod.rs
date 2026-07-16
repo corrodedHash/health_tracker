@@ -16,7 +16,7 @@ fn signed_cookie(key: &cookie::Key, user_id: &str) -> String {
         user_id: user_id.to_owned(),
     };
     let cookie_str =
-        health_auth::session::create_session_cookie(&data, key, time::Duration::hours(1))
+        health_auth::session::create_session_cookie(&data, key, time::Duration::hours(1), false)
             .expect("failed to create cookie");
 
     let parsed = cookie::Cookie::parse_encoded(cookie_str).expect("failed to parse cookie");
@@ -33,6 +33,8 @@ fn test_state() -> crate::state::AppState {
             listen_addr: String::new(),
             static_dir: None,
             oidc: None,
+            dev_auto_login: false,
+            cookie_secure: false,
         },
         cookie_key: cookie_key(),
         oidc_bundle: None,

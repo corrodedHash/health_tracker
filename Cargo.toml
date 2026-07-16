@@ -45,6 +45,7 @@ wiremock      = "0.6"
 
 # Web / API
 axum          = { version = "0.8", features = ["macros"] }
+utoipa        = "5"
 tower         = { version = "0.5", features = ["util"] }
 tower-http    = { version = "0.6", features = ["fs", "trace", "cors"] }
 reqwest       = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }

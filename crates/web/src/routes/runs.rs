@@ -14,6 +14,15 @@ use crate::error::WebError;
 use crate::middleware::session::UserId;
 use crate::state::AppState;
 
+#[utoipa::path(
+    post,
+    path = "/api/runs/gpx",
+    request_body(content = inline(serde_json::Value), description = "Raw GPX file bytes"),
+    responses(
+        (status = 200, description = "Run session created"),
+    ),
+    tag = "runs",
+)]
 pub async fn upload_gpx(
     State(state): State<AppState>,
     UserId(user_id): UserId,
@@ -41,6 +50,18 @@ pub async fn upload_gpx(
     Ok(Json(session))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/runs/{id}/gpx",
+    params(
+        ("id" = Uuid, Path, description = "Run session UUID"),
+    ),
+    responses(
+        (status = 200, description = "GPX file content", content_type = "application/gpx+xml"),
+        (status = 404, description = "GPX data not found"),
+    ),
+    tag = "runs",
+)]
 pub async fn get_gpx(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

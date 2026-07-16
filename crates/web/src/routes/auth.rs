@@ -5,22 +5,32 @@ use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
 use health_auth::flow;
+use health_auth::session::parse_session_cookie;
 use health_db::{OidcStateRepository, SqlxRepository, UsersRepository};
 
 use crate::error::WebError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct CallbackParams {
     code: String,
     state: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct LoginParams {
     pub resume_token: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/login",
+    params(LoginParams),
+    responses(
+        (status = 302, description = "Redirect to OIDC provider or auto-login"),
+    ),
+    tag = "auth",
+)]
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -39,6 +49,7 @@ pub async fn login(
             &session_data,
             &state.cookie_key,
             time::Duration::hours(24),
+            state.config.cookie_secure,
         )
         .map_err(WebError::Session)?;
 
@@ -79,6 +90,15 @@ pub async fn login(
     Ok(Redirect::to(&request.auth_url).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/callback",
+    params(CallbackParams),
+    responses(
+        (status = 200, description = "Login successful, sets session cookie"),
+    ),
+    tag = "auth",
+)]
 pub async fn callback(
     State(state): State<AppState>,
     Query(params): Query<CallbackParams>,
@@ -104,6 +124,7 @@ pub async fn callback(
         &session_data,
         &state.cookie_key,
         time::Duration::hours(24),
+        state.config.cookie_secure,
     )
     .map_err(WebError::Session)?;
 
@@ -117,8 +138,17 @@ pub async fn callback(
         .into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    responses(
+        (status = 200, description = "Logged out, session cookie cleared"),
+    ),
+    tag = "auth",
+)]
 pub async fn logout(State(state): State<AppState>) -> Result<Response, WebError> {
-    let cookie_str = health_auth::session::delete_session_cookie(&state.cookie_key);
+    let cookie_str =
+        health_auth::session::delete_session_cookie(&state.cookie_key, state.config.cookie_secure);
 
     Ok((
         StatusCode::OK,
@@ -126,4 +156,26 @@ pub async fn logout(State(state): State<AppState>) -> Result<Response, WebError>
         Json(serde_json::json!({ "ok": true })),
     )
         .into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/status",
+    responses(
+        (status = 200, description = "Authentication status",
+            body = serde_json::Value),
+    ),
+    tag = "auth",
+)]
+pub async fn status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Json<serde_json::Value> {
+    let authenticated = headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| parse_session_cookie(s, &state.cookie_key).ok())
+        .is_some();
+
+    Json(serde_json::json!({ "authenticated": authenticated }))
 }

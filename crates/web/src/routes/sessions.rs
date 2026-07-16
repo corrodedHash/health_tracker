@@ -1,6 +1,6 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use health_core::{ExerciseKind, ExerciseSession, NewExerciseSession};
@@ -10,13 +10,22 @@ use crate::error::WebError;
 use crate::middleware::session::UserId;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::IntoParams, utoipa::ToSchema)]
 pub struct ListParams {
     kind: Option<String>,
     from: Option<chrono::DateTime<chrono::Utc>>,
     to: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/exercise-sessions",
+    params(ListParams),
+    responses(
+        (status = 200, description = "List all exercise sessions"),
+    ),
+    tag = "sessions",
+)]
 pub async fn list(
     State(state): State<AppState>,
     UserId(user_id): UserId,
@@ -33,6 +42,14 @@ pub async fn list(
     Ok(Json(sessions))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/exercise-sessions",
+    responses(
+        (status = 200, description = "Session created"),
+    ),
+    tag = "sessions",
+)]
 pub async fn create(
     State(state): State<AppState>,
     UserId(user_id): UserId,
@@ -45,6 +62,18 @@ pub async fn create(
     Ok(Json(session))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/exercise-sessions/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Session UUID"),
+    ),
+    responses(
+        (status = 200, description = "Session found"),
+        (status = 404, description = "Session not found"),
+    ),
+    tag = "sessions",
+)]
 pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -54,6 +83,18 @@ pub async fn get(
     Ok(Json(session))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/exercise-sessions/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Session UUID"),
+    ),
+    responses(
+        (status = 200, description = "Session deleted", body = serde_json::Value),
+        (status = 404, description = "Session not found"),
+    ),
+    tag = "sessions",
+)]
 pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

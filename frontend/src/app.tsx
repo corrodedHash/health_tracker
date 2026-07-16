@@ -1,13 +1,14 @@
-import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 
 import { ExerciseInput } from "@/components/exercise-input";
 import { LoginPage } from "@/components/login-page";
 import { SessionList } from "@/components/session-list";
 import { WeightOverTimeChart } from "@/components/weight-chart";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getWeightDetails, listSessions } from "@/lib/api";
+import { checkAuth, getWeightDetails, listSessions } from "@/lib/api";
 import type { WeightSession } from "@/types";
 
 interface WeightedSessionEntry {
@@ -99,11 +100,35 @@ export default function App() {
   useResumeToken();
   const chartSessions = useWeightSessions();
 
+  const authQ = useQuery({
+    queryKey: ["auth", "status"],
+    queryFn: checkAuth,
+    retry: false,
+  });
+
+  const logout = useMutation({
+    mutationFn: () => axios.post("/auth/logout"),
+    onSuccess: () => {
+      authQ.refetch();
+    },
+    onError: () => {
+      authQ.refetch();
+    },
+  });
+
+  const logoutClick = useCallback(() => logout.mutate(), [logout]);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Health Tracker</h1>
-        <LoginPage />
+        {authQ.data ? (
+          <Button onClick={logoutClick} variant="outline" size="sm">
+            Logout
+          </Button>
+        ) : (
+          <LoginPage />
+        )}
       </header>
 
       <ExerciseInput />

@@ -10,17 +10,29 @@ use crate::error::WebError;
 use crate::middleware::session::UserId;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct HeartrateBody {
     pub samples: Vec<HeartrateSamplePayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct HeartrateSamplePayload {
     pub offset_secs: i32,
     pub bpm: i16,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/exercise-sessions/{id}/heartrate",
+    params(
+        ("id" = Uuid, Path, description = "Session UUID"),
+    ),
+    responses(
+        (status = 200, description = "Heartrate data added",
+            body = serde_json::Value),
+    ),
+    tag = "heartrate",
+)]
 pub async fn add(
     State(state): State<AppState>,
     UserId(_user_id): UserId,

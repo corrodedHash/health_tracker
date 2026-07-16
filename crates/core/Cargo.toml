@@ -13,6 +13,7 @@ chrono      = { workspace = true }
 time        = { workspace = true }
 uuid        = { workspace = true }
 thiserror   = { workspace = true }
+utoipa      = { workspace = true, features = ["chrono", "uuid"] }
 
 [dev-dependencies]
 # (no extra deps yet — pure unit tests)

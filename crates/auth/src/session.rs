@@ -27,15 +27,16 @@ pub fn create_session_cookie(
     data: &SessionData,
     key: &Key,
     max_age: Duration,
+    secure: bool,
 ) -> Result<String, SessionError> {
     let mut jar = CookieJar::new();
-    let cookie = Cookie::build((SESSION_COOKIE_NAME, data.user_id.clone()))
+    let mut cookie = Cookie::build((SESSION_COOKIE_NAME, data.user_id.clone()))
         .path("/")
         .http_only(true)
-        .secure(true)
         .same_site(SameSite::Lax)
         .max_age(max_age)
         .build();
+    cookie.set_secure(secure);
 
     jar.signed_mut(key).add(cookie);
 
@@ -73,15 +74,15 @@ pub fn parse_session_cookie(cookie_header: &str, key: &Key) -> Result<SessionDat
 
 /// Create a cookie string that deletes the session cookie.
 #[must_use]
-pub fn delete_session_cookie(key: &Key) -> String {
+pub fn delete_session_cookie(key: &Key, secure: bool) -> String {
     let mut jar = CookieJar::new();
-    let cookie = Cookie::build((SESSION_COOKIE_NAME, ""))
+    let mut cookie = Cookie::build((SESSION_COOKIE_NAME, ""))
         .path("/")
         .http_only(true)
-        .secure(true)
         .same_site(SameSite::Lax)
         .max_age(Duration::ZERO)
         .build();
+    cookie.set_secure(secure);
 
     jar.signed_mut(key).add(cookie);
 

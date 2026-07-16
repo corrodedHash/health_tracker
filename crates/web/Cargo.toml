@@ -37,6 +37,7 @@ haversine-rs = { workspace = true }
 mockall      = { workspace = true }
 hex          = { workspace = true }
 time         = { workspace = true }
+utoipa       = { workspace = true, features = ["axum_extras", "chrono", "uuid"] }
 
 [dev-dependencies]
 tower        = { workspace = true, features = ["util"] }
