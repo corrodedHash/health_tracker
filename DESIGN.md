@@ -263,7 +263,7 @@ bot crate ───────▶  MatrixClient trait  ──▶  matrix-sdk
                    ApiClient trait      ──▶  reqwest → web
 
 db crate  ───────▶  real SQLx against   ──▶  SQLite (unit)
-                   real Postgres        ──▶  Testcontainer (CI)
+                   real Postgres        ──▶  Testcontainer (unit + CI)
 
 core crate ──────▶  pure fn calls       ──▶  (no I/O at all)
 ```
@@ -274,15 +274,20 @@ core crate ──────▶  pure fn calls       ──▶  (no I/O at all)
 positive, weight > 0, etc.), enum exhaustiveness, serde round-trips. Fastest
 test tier, run on every `cargo test`.
 
-**`db` crate** — two tiers:
-| Tier | Target | Command | Speed |
-|---|---|---|---|
-| Unit | SQLite (in-memory) | `cargo test` | ~10ms/test |
-| Integration | Postgres (Testcontainers) | `cargo test --test '*'` | ~5s spin-up |
+**`db` crate** — Postgres-only tier (decision: drop SQLite):
+| Target | Command | Speed |
+|---|---|---|
+| Postgres (Testcontainer) | `cargo test -p health-db` | ~5s spin-up per binary |
 
-SQLite covers query parsing and row mapping for free. The `#[sqlx::test]`
-macro creates a fresh DB per test. CI runs the Postgres tier; local dev only
-needs SQLite unless you're working on PG-specific features.
+SQLite was considered (parallel `migrations_sqlite/` + a `SqliteRepository`)
+but rejected — maintaining a second migration set and a second impl of all
+eight repository traits to paper over `INTERVAL`/`BYTEA`/`gen_random_uuid`
+friction is more pain than it's worth. Instead, `#[sqlx::test]` is wired
+against a Postgres testcontainer: each `#[sqlx::test]` test gets a fresh
+database inside a transient container. Local dev needs Docker running; CI
+starts the testcontainer as part of the test job. The `SqlxRepository`
+(`PgPool`) impl is the only impl — no trait duplication, no type-mapping
+bugs hiding behind a parallel migration set.
 
 **`web` crate** — Axum makes handlers testable via `tower::ServiceExt::oneshot`:
 - Repositories are trait objects → inject `MockRepository` (via `mockall`
@@ -341,7 +346,7 @@ The HTTP call to the web API is behind `ApiClient` (mocked with `wiremock`).
          ╱─────╲
         ╱  E2E  ╲          Playwright (browser → real server → PG) — CI only
        ╱─────────╲
-      ╱ Integration ╲       Axum router + mock repo + real SQLite — `cargo test`
+      ╱ Integration ╲       Axum router + mock repo + real Postgres (testcontainer) — `cargo test`
      ╱───────────────╲
     ╱  Unit (domain)   ╲    Core types, validation, serde — `cargo test`
    ╱─────────────────────╲
@@ -354,8 +359,8 @@ The HTTP call to the web API is behind `ApiClient` (mocked with `wiremock`).
 | Step | What | Depends on |
 |---|---|---|
 | `cargo check` | SQLx query checking + Rust compilation | Postgres via `sqlx prepare` cached |
-| `cargo test` | All tier-1 (core, db SQLite, web mocked, auth mocked) | Nothing |
-| `cargo test --test '*'` | Tier-2 (db Postgres integration) | Testcontainers (Docker) |
+| `cargo test` | All (core, db Postgres testcontainer, web mocked, auth mocked) | Docker (testcontainer) |
+| `cargo test --test '*'` | (Reserved for future heavier integration suites) | — |
 | `playwright test` | E2E browser flow | Deployed server stub |
 | `cargo clippy --all-targets` | Lint | — |
 | `cargo build --features bot` | Bot compiles separately | — |
@@ -372,7 +377,7 @@ Static test data lives in `crates/*/tests/fixtures/`:
 
 | Risk | Mitigation |
 |---|---|
-| SQLx compile-time checks need a running DB | CI starts a Postgres Testcontainer; `sqlx prepare` generates offline cache for dev |
+| Postgres testcontainer is required for `cargo test` | Local dev must have Docker running; CI starts the testcontainer as part of the job. `sqlx prepare` generates an offline cache for `cargo check` without a live DB (5.38) |
 | Matrix SDK dependency bloat in bot | Bot is a separate binary — web server never compiles it |
 | JSONB would lose type safety | Not using JSONB — concrete columns per type via CTI pattern |
 | Time zone bugs | All `started_at` stored as `TIMESTAMPTZ` (UTC); conversion happens only in the frontend |
@@ -382,10 +387,135 @@ Static test data lives in `crates/*/tests/fixtures/`:
 ## Implementation Order
 
 1. `core` — domain types, `ExerciseKind` enum with `Weight`, `Core`, `Running` variants (**done**)
-2. `db` — migrations, repository traits + SQLx implementations, unit tests with SQLite. Migrations present; repository traits + impl in progress.
+2. `db` — migrations, repository traits + SQLx implementations, unit tests against Postgres testcontainers. Migrations present; repository traits + impl done; tests next (item 5.10).
 3. `auth` — OIDC token validation, session management
 4. `web` — basic CRUD endpoints behind OIDC, static file serving
 5. `frontend` — login, session list, exercise form (shadcn + echarts)
 6. `bot` — Matrix listener, GPX → API bridge
 7. Heartrate ingest CLI for at least one watch export format
 8. Polish: charts, filters, GPX track visualization on map
+
+## Resolved Decisions
+
+These pin down selections left open in §6 of `MIGRATION.md`:
+
+- **Config lib → `config` crate.** Both `crates/web` (5.17) and
+  `crates/bot` (5.27) load layered config via the `config` crate:
+  checked-in `config/default.toml` defaults overridden by environment
+  variables (and optionally `config/<env>.toml`). Secrets never land in
+  checked-in defaults — they come from env. Add `config` to
+  `[workspace.dependencies]` and to web + bot `Cargo.toml`.
+- **Bot always in the workspace.** No feature gate. `crates/bot` is a
+  workspace member unconditionally; we accept the `matrix-sdk` compile
+  cost. (Matches the recommendation in `MIGRATION.md` §6 item 2.)
+- **Keep `vite-plugin-pwa`.** The frontend carries the PWA plugin so
+  installs work on mobile. Small cost, useful offline UX.
+- **Frontend GPX rendering deferred.** The server still parses GPX
+  server-side on `POST /api/runs/gpx`, extracts distance + duration at
+  ingest time, and stores the raw bytes in `running_sessions.gpx_data`
+  plus exposes `GET /api/runs/:id/gpx`. The frontend, however, does
+  **not** render a map in the first cut — it shows only the numeric
+  distance and pace. Map selection (leaflet vs maplibre-gl) is deferred
+  to a later phase. `POST /api/runs/gpx` is **bearer-token** auth
+  (machine/bot-facing), not OIDC session.
+- **Map lib selection (leaflet vs maplibre-gl) deferred.** Decide when
+  the map view is actually built; pin the dep then.
+
+## Parallelization Plan
+
+The `MIGRATION.md` TODO phases have one critical chain and several
+independent side-streams. Two agents can work concurrently:
+
+### Agent A — critical path: db → auth → web
+
+Sequence (strict order — each unblocks the next):
+
+1. **5.10** — Postgres testcontainer `#[sqlx::test]` unit tests for the
+   `SqlxRepository` impls. Local dev needs Docker running. Cover each
+   child-type insert+get, `KindMismatch`, heartrate bulk idempotency,
+   api_token issue/verify/revoke, users upsert, oidc_state lifecycle,
+   sessions list filters.
+2. **5.12–5.16** — port `workout_tracker/src/oidc.rs:50-253` into
+   `crates/auth/` (setup_oidc_client, start_login, finish_login — the
+   `panic!` at `oidc.rs:223` becomes `OidcCallbackError::MissingIdToken`).
+   Define `AuthProvider` trait + mock. Add `SessionToken` sign/verify
+   (HMAC-SHA256); web just sets the cookie.
+3. **5.17–5.22** — axum server, `config`-crate config, run migrations
+   on startup. Routes from `DESIGN.md` §API. OIDC auth middleware
+   stamps `UserId`; bearer-token middleware for `POST /api/runs/gpx`.
+   `ServeDir` for `frontend/dist`. `POST /api/runs/gpx` parses GPX
+   server-side with the `gpx` + `haversine-rs` crates (add as web
+   deps), computes `distance_m` + `duration`, stores both + raw bytes.
+   Router tests via `tower::ServiceExt::oneshot` + mock repos.
+
+### Agent B — independent side-streams (run in parallel with A)
+
+Stream 1 (bot ports — no dependency on web/auth being done):
+- **5.23** — port `matrix-running/src/routes.rs` verbatim →
+  `crates/bot/src/gpx.rs` (keep `get_track_moving_distance_time`).
+- **5.24** — port `matrix-running/src/auth.rs` →
+  `crates/bot/src/matrix_auth.rs` (session restore from `session.toml`).
+- **5.28** — copy fixtures `matrix-running/src/testdata/*.gpx` (and
+  `heartrate.json` as future-scraper seed) into
+  `crates/bot/tests/fixtures/`.
+
+Stream 2 (bot runtime + traits — can start in parallel; only the live
+HTTP call needs the bearer endpoint shape, which is contractual from
+`DESIGN.md` §API, not from web being implemented):
+- **5.25** — `MatrixClient` trait (`wait_for_gpx_file -> Future<(Vec<u8>,
+  Metadata)>`); real impl wraps `matrix-sdk` (port
+  `matrix-running/src/events.rs:217-306` `handle_file`).
+- **5.26** — `ApiClient` trait (`post_run_gpx(bytes, started_at,
+  distance_m, duration) -> Future<Result<Uuid>>`); real impl uses
+  `reqwest` + bearer token.
+- **5.27** — `crates/bot/src/main.rs`: config (via the `config` crate —
+  same as web), build traits, run sync loop (port
+  `matrix-running/src/main.rs:65-125` but drop the `argh` main-args
+  dance). Drop the `heartbeat_manager.rs:77` path-traversal TODO and
+  the `heartbeat`/`heartrate` naming drift (don't carry over).
+- **5.29** — tests: `wiremock` for `ApiClient`, hand-written mock for
+  `MatrixClient`.
+
+Stream 3 (frontend — depends only on the API contract in §API, not on
+web being live; mock APIs suffice):
+- **5.30** — `npm create vite@latest frontend -- --template react-ts`
+  (or copy `workout_tracker/frontend/*` minus `node_modules`/`dist`).
+  Keep `vite-plugin-pwa`.
+- **5.31** — keep: `vite.config.ts` dev proxy (lines 44-50),
+  `package.json` (TanStack Query 5, axios, dayjs, PWA plugin),
+  `app.tsx`'s resume-token-dance logic (lines 43-110).
+- **5.32** — remove MUI: uninstall `@mui/*` + `@emotion/*` + `@mui/x-*`.
+  Add shadcn/ui (`npx shadcn@latest init`). Add echarts (`echarts` +
+  `echarts-for-react`).
+- **5.33** — build skeletons: login page, session list (echarts
+  weight-over-time), exercise entry form. **No GPX map view** this phase
+  — show only numeric distance + pace for runs (GPX bytes are stored and
+  served via `GET /api/runs/:id/gpx`, but not rendered yet).
+
+Stream 4 (ops — trivial, parallel):
+- **5.36** — `README.md` with quickstart (env vars, the Postgres
+  testcontainer requirement for `cargo test`, dev frontend proxy port).
+- **5.37** — `.gitignore`: `target/`, `frontend/node_modules/`,
+  `frontend/dist/`, `session.toml`, `config.toml` if secrets,
+  `.sqlx/` (the offline cache is committed at 5.38 once it exists).
+- **5.34** — `.gitea/workflows/test.yaml` mirroring
+  `workout_tracker/.gitea/workflows/test.yaml` but with the workspace +
+  Postgres testcontainer + `cargo test --workspace` +
+  `cargo clippy --all-targets`.
+- **5.35** — `.gitea/workflows/release.yaml` mirroring
+  `workout_tracker/.gitea/workflows/release.yaml` (git-cliff, build
+  matrix, release).
+
+### Why this split works
+
+The critical chain `5.10 → 5.12–5.16 → 5.17–5.22` is strictly sequential
+inside Agent A. Agent B's four streams share **no** write dependency on
+A's crates: bot ports are pure logic, the bot traits compile against
+`health-core` only, the frontend is a separate package, and the ops
+files are config-only. The only **contractual** coupling point is the
+bearer-token endpoint shape (`POST /api/runs/gpx`) — but that's defined
+by `DESIGN.md` §API, so Agent B can implement `ApiClient` against the
+contract without Agent A's web crate existing. `5.38` (the `.sqlx/`
+offline cache) and `5.11` (the testcontainer-as-test-tier decision) are
+the remaining items that fold into Agent A's flow rather than run
+standalone.

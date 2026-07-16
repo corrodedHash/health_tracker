@@ -326,22 +326,24 @@ The decisions baked in so far:
   `VALUES` insert is a future optimisation once watch export sizes
   warrant it.
 
-### SQLite test strategy (for item 5.10)
+### Test strategy decision (for item 5.10)
 
-Postgres-only migrations are fine for production but break the
-`#[sqlx::test]` SQLite-in-memory tier promised by `DESIGN.md`. Two
-options, to pick when 5.10 is started:
+Postgres-only migrations are kept for both production and tests. The
+SQLite-in-memory tier originally promised by `DESIGN.md` is **dropped**:
+maintaining a parallel `migrations_sqlite/` set and a second impl of all
+eight repository traits to paper over `INTERVAL` / `BYTEA` /
+`gen_random_uuid` friction is more pain than it's worth.
 
-1. **Parallel migration set** under `migrations_sqlite/<n>_<name>/`
-   with `TEXT` UUIDs, `INTEGER` durations, and `BLOB` GPX. The repo
-   impls run against whichever set the `SqlitePool`/`PgPool` was built
-   with. Doubles surface area but keeps the unit tier pure-SQLite.
-2. **PG-only `#[sqlx::test]` with `testcontainers`** — drop SQLite
-   entirely; every `db` unit test spins up a Postgres container.
-   Slower CI but no duplicate migrations.
+Instead, `#[sqlx::test]` in `crates/db` is wired against a **Postgres
+testcontainer**: each test gets a fresh database inside a transient
+container. Local dev needs Docker running; CI starts the testcontainer
+as part of the test job. The single `SqlxRepository` (`PgPool`) impl is
+the only impl — no trait duplication, no type-mapping bugs hiding
+behind a parallel migration set.
 
-Lean toward option 1 for speed, fall back to option 2 if SQLite type
-friction (e.g. no `INTERVAL`) becomes unmanageable.
+Practical note for 5.37: `.gitignore` does **not** need to ignore a
+`migrations_sqlite/` dir (it doesn't exist); it does need to ignore any
+local testcontainer caches and Postgres data dirs used in ad-hoc runs.
 
 ## 5. <a name="todo"></a>TODO
 
@@ -366,10 +368,12 @@ the reference repo to lift from where applicable.
       `OidcStateRepository`, `ApiTokenRepository`) and a
       `SqlxRepository` impl. Replace `workout_tracker`'s closed
       `Database` enum with trait objects (design §Testability).
-- [ ] **5.10** SQLite in-memory unit tests for the repo impls (design
-      §Testability, db tier 1). Use `#[sqlx::test]`.
-- [ ] **5.11** Optional: Postgres Testcontainers integration tier
-      (design §Testability, db tier 2).
+- [ ] **5.10** Postgres testcontainer unit tests for the repo impls
+      (design §Testability, db tier). `#[sqlx::test]` against a
+      transient Postgres container, one DB per test. Local dev requires
+      Docker running. No parallel SQLite tier.
+- [ ] **5.11** (folded into 5.10 — the testcontainer tier IS the test
+      tier; no separate integration-only item remains.)
 
 ### Phase 2 — auth (unblocks web)
 
@@ -473,20 +477,22 @@ the reference repo to lift from where applicable.
 
 ## 6. Open questions (decide before starting the relevant phase)
 
-1. **Config lib:** `config` crate, `figment`, or hand-rolled `toml` +
-   `std::env` (as both parent repos do)? DESIGN.md says "environment
-   variable layers over checked-in defaults" — `figment` is closest.
-2. **Bot feature gate:** keep `crates/bot` always in workspace, or gate
-   with a feature flag so `cargo build` doesn't pull `matrix-sdk` by
-   default? DESIGN.md offers both options. Recommend: always in
-   workspace, accept the matrix-sdk compile cost.
-3. **Frontend bundler extras:** keep `vite-plugin-pwa` from the parent
-   repo? Probably yes — small cost, useful mobile UX.
-4. **Map rendering for GPX:** leaflet vs maplibre-gl. Maplibre is
-   lighter without the Google tiles dependency. Decide at phase 5.
-5. **Watch scraper crate:** design says `crates/scrapers/` or scripts.
-   Suggest adding it as a 6th workspace member only when first scraper
-   is actually built; don't spec it now.
+All previously-open questions are now resolved —
+see DESIGN.md §"Resolved Decisions" for the rationale:
+
+1. **Config lib → `config` crate.** Layered `config/<env>.toml` over
+   `config/default.toml` over env. Secrets never in checked-in defaults.
+2. **Bot always in the workspace.** No feature flag; accept the
+   `matrix-sdk` compile cost.
+3. **Keep `vite-plugin-pwa`.** Small cost, useful mobile UX.
+4. **Frontend GPX rendering deferred — no map view this phase.**
+   Server stores `gpx_data` and serves `GET /api/runs/:id/gpx`;
+   frontend shows only numeric distance + pace for runs. Map lib
+   (leaflet vs maplibre-gl) decided later when the map view is built.
+5. **Watch scraper crate → defer.** Don't add a 6th workspace member
+   until the first scraper is actually built.
+6. **Test backend → Postgres testcontainers only.** SQLite dropped
+   (see "Test strategy decision" above). Local dev needs Docker.
 
 ## 7. How to verify progress so far
 
@@ -505,10 +511,8 @@ needs at least Rust 1.85 stable, but some parent repos required nightly.
 ## 8. Where to start next session
 
 Phase 1 items 5.1–5.9 are done. Next up: **5.10** — write `#[sqlx::test]`
-unit tests for the `SqlxRepository` impls. Decide the SQLite strategy
-first (see "SQLite test strategy" above): the current `SqlxRepository`
-targets **Postgres** (`PgPool`), and the migrations are PG-only. Either
-(a) maintain a parallel `migrations_sqlite/` set and add a `SqliteRepository`,
-or (b) drop SQLite and run `#[sqlx::test]` against a Postgres testcontainers
-instance in CI. Once 5.10 passes against whichever backend, move to
+unit tests for the `SqlxRepository` impls against a **Postgres
+testcontainer** (see "Test strategy decision" above). The
+`SqlxRepository` targets Postgres (`PgPool`) and the migrations are
+PG-only; local dev needs Docker running. Once 5.10 passes, move to
 Phase 2 (auth, item 5.12).
