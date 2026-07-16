@@ -1,7 +1,7 @@
-use axum::extract::{Query, State};
-use axum::http::{header, StatusCode};
-use axum::response::{IntoResponse, Redirect, Response};
 use axum::Json;
+use axum::extract::{Query, State};
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
 use health_auth::flow;

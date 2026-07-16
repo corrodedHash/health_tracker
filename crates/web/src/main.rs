@@ -27,8 +27,7 @@ async fn main() -> anyhow::Result<()> {
 
     health_db::run_migrations(&pool).await?;
 
-    let cookie_key_bytes =
-        hex::decode(&config.cookie_key).context("invalid cookie key hex")?;
+    let cookie_key_bytes = hex::decode(&config.cookie_key).context("invalid cookie key hex")?;
     let cookie_key = cookie::Key::from(&cookie_key_bytes[..]);
 
     let oidc_bundle = if let Some(oidc_config) = &config.oidc {
@@ -61,9 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("listening on {}", config.listen_addr);
 
-    axum::serve(listener, app)
-        .await
-        .context("server error")?;
+    axum::serve(listener, app).await.context("server error")?;
 
     Ok(())
 }

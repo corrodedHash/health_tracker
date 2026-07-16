@@ -2,7 +2,7 @@
 
 use axum::body::Body;
 use axum::extract::FromRequestParts;
-use axum::http::{header, Request, StatusCode};
+use axum::http::{Request, StatusCode, header};
 use tower::{Layer, ServiceExt};
 
 use crate::middleware::session::{SessionAuthLayer, UserId};
@@ -63,10 +63,7 @@ async fn session_auth_passes_without_cookie() {
     let layer = SessionAuthLayer::new(key);
     let svc = layer.layer(axum::Router::new().route("/test", axum::routing::get(|| async {})));
 
-    let req = Request::builder()
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
     let response = svc.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -93,10 +90,7 @@ async fn session_auth_rejects_invalid_signature() {
 
 #[tokio::test]
 async fn user_id_extractor_fails_without_extension() {
-    let req = Request::builder()
-        .uri("/")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/").body(Body::empty()).unwrap();
 
     let (mut parts, _body) = req.into_parts();
     let result = UserId::from_request_parts(&mut parts, &()).await;
@@ -105,10 +99,7 @@ async fn user_id_extractor_fails_without_extension() {
 
 #[tokio::test]
 async fn user_id_extractor_succeeds_with_extension() {
-    let req = Request::builder()
-        .uri("/")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/").body(Body::empty()).unwrap();
 
     let (mut parts, _body) = req.into_parts();
     let uid = UserId("550e8400-e29b-41d4-a716-446655440000".parse().unwrap());
@@ -128,12 +119,10 @@ async fn session_cookie_round_trip_via_middleware() {
     let cookie = signed_cookie(&key, user_id);
 
     let layer = SessionAuthLayer::new(key);
-    let svc = layer.layer(
-        axum::Router::new().route(
-            "/test",
-            axum::routing::get(|UserId(uid): UserId| async move { uid.to_string() }),
-        ),
-    );
+    let svc = layer.layer(axum::Router::new().route(
+        "/test",
+        axum::routing::get(|UserId(uid): UserId| async move { uid.to_string() }),
+    ));
 
     let req = Request::builder()
         .uri("/test")

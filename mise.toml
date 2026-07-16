@@ -6,6 +6,7 @@
 [tools]
 # Used by the `changelog` task and mirrored by the release workflow.
 git-cliff = { version = "2.13.1", repository = "https://github.com/orhun/git-cliff" }
+pnpm = "11"
 
 [tasks.build]
 description = "Build the debug binaries (health-web, health-bot)"
@@ -42,6 +43,22 @@ run = "cargo fmt --all -- --check"
 [tasks.check]
 description = "Run everything CI runs: fmt check, clippy, tests"
 depends = ["fmt-check", "lint", "test"]
+
+[tasks.frontend-install]
+description = "Install frontend dependencies"
+run = "pnpm --dir frontend install"
+
+[tasks.frontend-dev]
+description = "Start the frontend dev server"
+run = "pnpm --dir frontend dev"
+
+[tasks.frontend-build]
+description = "Build the frontend for production"
+run = "pnpm --dir frontend build"
+
+[tasks.frontend-lint]
+description = "Lint the frontend"
+run = "pnpm --dir frontend lint"
 
 [tasks.changelog]
 description = "Preview the bumped version and notes for the pending (unreleased) commits"

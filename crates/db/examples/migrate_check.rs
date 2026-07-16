@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, reason = "example binary, not library code")]
 
-use std::path::Path;
 use sqlx::postgres::PgPoolOptions;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() {
@@ -18,12 +18,10 @@ async fn main() {
 
     health_db::run_migrations(&pool).await.unwrap();
 
-    let rows: Vec<(i64,)> = sqlx::query_as(
-        "SELECT version FROM _sqlx_migrations ORDER BY version",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let rows: Vec<(i64,)> = sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     eprintln!("applied migrations: {}", rows.len());
     for r in &rows {
         eprintln!("  {}", r.0);

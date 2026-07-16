@@ -439,42 +439,46 @@ the reference repo to lift from where applicable.
 
 ### Phase 4 — bot (medium priority)
 
-- [ ] **5.23** Port `matrix-running/src/routes.rs` verbatim →
+- [x] **5.23** Port `matrix-running/src/routes.rs` verbatim →
       `crates/bot/src/gpx.rs`. Keep `get_track_moving_distance_time`.
-- [ ] **5.24** Port `matrix-running/src/auth.rs` →
+- [x] **5.24** Port `matrix-running/src/auth.rs` →
       `crates/bot/src/matrix_auth.rs` (session restore from
       `session.toml`).
-- [ ] **5.25** Define `MatrixClient` trait
+- [x] **5.25** Define `MatrixClient` trait
       (`wait_for_gpx_file -> Future<(Vec<u8>, Metadata)>`); real impl
       wraps `matrix-sdk` (port `matrix-running/src/events.rs:217-306`
       `handle_file` as the trait's body).
-- [ ] **5.26** Define `ApiClient` trait
+- [x] **5.26** Define `ApiClient` trait
       (`post_run_gpx(bytes, started_at, distance_m, duration ->
       Future<Result<Uuid>>)`); real impl uses reqwest + bearer token.
-- [ ] **5.27** `crates/bot/src/main.rs`: wire config, build traits,
+- [x] **5.27** `crates/bot/src/main.rs`: wire config, build traits,
       run sync loop (port `matrix-running/src/main.rs:65-125` but
       drop the `argh` main-args dance and use
-      `figment`/`config`/just-env — TBD which).
-- [ ] **5.28** Copy fixtures:
+      `figment`/`config`/just-env — TBD which). Drop the
+      `heartbeat_manager.rs:77` path-traversal TODO and the
+      `heartbeat`/`heartrate` naming drift (don't carry over).
+- [x] **5.28** Copy fixtures:
       `cp /home/lukas/documents/coding/rust/matrix-running/src/testdata/*.gpx
        crates/bot/tests/fixtures/` (and the heartrate.json as a
        future-scraper seed).
-- [ ] **5.29** Tests: `wiremock` for `ApiClient`, hand-written mock
+- [x] **5.29** Tests: `wiremock` for `ApiClient`, hand-written mock
       for `MatrixClient` (design §Testability, bot tier).
 
 ### Phase 5 — frontend (medium priority, mostly lecture-by-example)
 
-- [ ] **5.30** `npm create vite@latest frontend -- --template react-ts`
+- [x] **5.30** `npm create vite@latest frontend -- --template react-ts`
       or copy `workout_tracker/frontend/*` minus `node_modules`/`dist`.
-- [ ] **5.31** Keep: `vite.config.ts` dev proxy (lines 44-50),
+- [x] **5.31** Keep: `vite.config.ts` dev proxy (lines 44-50),
       `package.json` (TanStack Query 5, axios, dayjs, PWA plugin),
       `app.tsx`'s resume-token-dance logic (lines 43-110).
-- [ ] **5.32** Remove MUI: uninstall `@mui/*` + `@emotion/*` +
+- [x] **5.32** Remove MUI: uninstall `@mui/*` + `@emotion/*` +
       `@mui/x-*`. Add shadcn/ui (`npx shadcn@latest init`). Add
       echarts (`echarts` + `echarts-for-react`).
-- [ ] **5.33** Build skeletons: login page, session list (echarts
-      weight-over-time), exercise entry form, run-detail map view
-      (consume `/api/runs/:id/gpx`).
+- [x] **5.33** Build skeletons: login page, session list (echarts
+      weight-over-time), exercise entry form. No **GPX map view** this
+      phase — show only numeric distance + pace for runs (GPX bytes are
+      stored and served via `GET /api/runs/:id/gpx`, but not rendered
+      yet).
 
 ### Phase 6 — quality + ops (low priority)
 
@@ -494,20 +498,22 @@ the reference repo to lift from where applicable.
 
 ## 6. Open questions (decide before starting the relevant phase)
 
-1. **Config lib:** `config` crate, `figment`, or hand-rolled `toml` +
-   `std::env` (as both parent repos do)? DESIGN.md says "environment
-   variable layers over checked-in defaults" — `figment` is closest.
-2. **Bot feature gate:** keep `crates/bot` always in workspace, or gate
-   with a feature flag so `cargo build` doesn't pull `matrix-sdk` by
-   default? DESIGN.md offers both options. Recommend: always in
-   workspace, accept the matrix-sdk compile cost.
-3. **Frontend bundler extras:** keep `vite-plugin-pwa` from the parent
-   repo? Probably yes — small cost, useful mobile UX.
-4. **Map rendering for GPX:** leaflet vs maplibre-gl. Maplibre is
-   lighter without the Google tiles dependency. Decide at phase 5.
-5. **Watch scraper crate:** design says `crates/scrapers/` or scripts.
-   Suggest adding it as a 6th workspace member only when first scraper
-   is actually built; don't spec it now.
+All previously-open questions are now resolved —
+see DESIGN.md §"Resolved Decisions" for the rationale:
+
+1. **Config lib → `config` crate.** Layered `config/<env>.toml` over
+   `config/default.toml` over env. Secrets never in checked-in defaults.
+2. **Bot always in the workspace.** No feature flag; accept the
+   `matrix-sdk` compile cost.
+3. **Keep `vite-plugin-pwa`.** Small cost, useful mobile UX.
+4. **Frontend GPX rendering deferred — no map view this phase.**
+   Server stores `gpx_data` and serves `GET /api/runs/:id/gpx`;
+   frontend shows only numeric distance + pace for runs. Map lib
+   (leaflet vs maplibre-gl) decided later when the map view is built.
+5. **Watch scraper crate → defer.** Don't add a 6th workspace member
+   until the first scraper is actually built.
+6. **Test backend → Postgres testcontainers only.** SQLite dropped
+   (see "Test strategy decision" above). Local dev needs Docker.
 
 ## 7. How to verify progress so far
 

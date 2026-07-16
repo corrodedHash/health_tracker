@@ -10,8 +10,8 @@ use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use health_core::{
-    CoreSession, ExerciseKind, HeartrateSample, NewApiToken, NewExerciseSession, NewHeartrateSamples,
-    NewOidcState, RunningSession, WeightSession,
+    CoreSession, ExerciseKind, HeartrateSample, NewApiToken, NewExerciseSession,
+    NewHeartrateSamples, NewOidcState, RunningSession, WeightSession,
 };
 use health_db::{
     ApiTokenRepository, CoreRepository, DbError, HeartrateRepository, OidcStateRepository,
@@ -95,7 +95,9 @@ async fn sessions_insert_get_list_delete() {
     let fetched = SessionsRepository::get(&r, session.id).await.unwrap();
     assert_eq!(fetched.id, session.id);
 
-    let listed = SessionsRepository::list(&r, uid, None, None, None).await.unwrap();
+    let listed = SessionsRepository::list(&r, uid, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, session.id);
 
@@ -123,10 +125,9 @@ async fn sessions_list_filters_by_kind_and_range() {
         .with_timezone(&Utc);
     let run = SessionsRepository::insert(&r, uid, &run).await.unwrap();
 
-    let weight_only =
-        SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
-            .await
-            .unwrap();
+    let weight_only = SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
+        .await
+        .unwrap();
     assert_eq!(weight_only.len(), 1);
     assert_eq!(weight_only[0].id, w.id);
 
@@ -147,15 +148,9 @@ async fn sessions_list_filters_by_kind_and_range() {
         .unwrap();
     assert_eq!(early.len(), 2);
 
-    let range = SessionsRepository::list(
-        &r,
-        uid,
-        Some(ExerciseKind::Core),
-        Some(from),
-        Some(from),
-    )
-    .await
-    .unwrap();
+    let range = SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
+        .await
+        .unwrap();
     assert!(range.is_empty());
     let _ = (c, run);
 }
@@ -166,7 +161,9 @@ async fn sessions_get_not_found() {
     let p = pool().await;
     truncate_all(&p).await;
     let r = repo().await;
-    let err = SessionsRepository::get(&r, Uuid::new_v4()).await.unwrap_err();
+    let err = SessionsRepository::get(&r, Uuid::new_v4())
+        .await
+        .unwrap_err();
     assert!(matches!(err, DbError::NotFound));
 }
 
@@ -311,18 +308,36 @@ async fn heartrate_bulk_insert_idempotent_and_list() {
     let samples = NewHeartrateSamples {
         session_id: s.id,
         samples: vec![
-            HeartrateSample { session_id: s.id, offset_secs: 0, bpm: 100 },
-            HeartrateSample { session_id: s.id, offset_secs: 10, bpm: 120 },
-            HeartrateSample { session_id: s.id, offset_secs: 20, bpm: 140 },
+            HeartrateSample {
+                session_id: s.id,
+                offset_secs: 0,
+                bpm: 100,
+            },
+            HeartrateSample {
+                session_id: s.id,
+                offset_secs: 10,
+                bpm: 120,
+            },
+            HeartrateSample {
+                session_id: s.id,
+                offset_secs: 20,
+                bpm: 140,
+            },
         ],
     };
-    let n = HeartrateRepository::insert_bulk(&r, &samples).await.unwrap();
+    let n = HeartrateRepository::insert_bulk(&r, &samples)
+        .await
+        .unwrap();
     assert_eq!(n, 3);
 
-    let n2 = HeartrateRepository::insert_bulk(&r, &samples).await.unwrap();
+    let n2 = HeartrateRepository::insert_bulk(&r, &samples)
+        .await
+        .unwrap();
     assert_eq!(n2, 0);
 
-    let listed = HeartrateRepository::list_for_session(&r, s.id).await.unwrap();
+    let listed = HeartrateRepository::list_for_session(&r, s.id)
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 3);
     assert_eq!(listed[0].offset_secs, 0);
     assert_eq!(listed[2].bpm, 140);
@@ -342,7 +357,10 @@ async fn heartrate_insert_bulk_empty_is_zero() {
         session_id: s.id,
         samples: vec![],
     };
-    assert_eq!(HeartrateRepository::insert_bulk(&r, &empty).await.unwrap(), 0);
+    assert_eq!(
+        HeartrateRepository::insert_bulk(&r, &empty).await.unwrap(),
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------

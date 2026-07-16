@@ -1,10 +1,10 @@
 use std::io::Cursor;
 
+use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use uuid::Uuid;
 
 use health_core::{ExerciseKind, NewExerciseSession, RunningSession};
@@ -87,8 +87,8 @@ fn parse_gpx(bytes: &[u8]) -> Result<(f64, std::time::Duration), WebError> {
                 if let Some(time) = point.time {
                     let odt: health_core::time::OffsetDateTime = time.into();
                     let secs = odt.unix_timestamp();
-                    let dt = health_core::chrono::DateTime::from_timestamp(secs, 0)
-                        .unwrap_or_default();
+                    let dt =
+                        health_core::chrono::DateTime::from_timestamp(secs, 0).unwrap_or_default();
                     if first_time.is_none() {
                         first_time = Some(dt);
                     }

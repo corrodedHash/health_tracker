@@ -1,8 +1,8 @@
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
+use openidconnect::reqwest;
 use openidconnect::{
     ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge, RedirectUrl,
 };
-use openidconnect::{reqwest};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -105,7 +105,10 @@ pub async fn setup_oidc_client(config: OidcConfig) -> Result<OidcClientBundle, O
             .map_err(|_| OidcSetupError::RedirectUriParse(config.redirect_uri))?,
     );
 
-    Ok(OidcClientBundle { http_client, client })
+    Ok(OidcClientBundle {
+        http_client,
+        client,
+    })
 }
 
 #[derive(Debug, Clone)]

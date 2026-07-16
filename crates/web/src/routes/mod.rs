@@ -4,8 +4,8 @@ pub mod runs;
 pub mod sessions;
 pub mod tokens;
 
-use axum::routing;
 use axum::Router;
+use axum::routing;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
@@ -30,10 +30,7 @@ pub fn build_router(state: AppState) -> Router {
             routing::post(heartrate::add),
         )
         .route("/runs/{id}/gpx", routing::get(runs::get_gpx))
-        .route(
-            "/tokens",
-            routing::get(tokens::list).post(tokens::issue),
-        )
+        .route("/tokens", routing::get(tokens::list).post(tokens::issue))
         .route("/tokens/{id}", routing::delete(tokens::revoke))
         .layer(session_layer);
 
