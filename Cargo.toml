@@ -39,16 +39,17 @@ async-trait   = "0.1"
 
 # Web / API
 axum          = { version = "0.8", features = ["macros"] }
-tower         = "0.5"
+tower         = { version = "0.5", features = ["util"] }
 tower-http    = { version = "0.6", features = ["fs", "trace", "cors"] }
 reqwest       = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
+config        = { version = "0.14", default-features = false, features = ["toml"] }
+cookie        = { version = "0.18", features = ["signed", "secure", "percent-encode"] }
 
 # OIDC
 openidconnect = "4.0"
 
 # Database
-sqlx          = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "sqlite", "uuid", "chrono", "macros", "migrate", "json"] }
+sqlx          = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros", "migrate", "json"] }
 sha2          = "0.10"
 rand          = "0.8"
 hex           = "0.4"
@@ -57,6 +58,11 @@ hex           = "0.4"
 matrix-sdk    = { version = "0.11", default-features = false, features = ["native-tls"] }
 gpx           = "0.10"
 haversine-rs  = "0.3"
+
+# Test-only
+serial_test   = "3.5"
+mockall       = "0.13"
+http-body-util = "0.1"
 
 
 # === Workspace-wide lints (mirrors the strict profile from both parent repos) ===

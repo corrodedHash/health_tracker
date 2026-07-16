@@ -4,15 +4,21 @@
 > Pair it with `DESIGN.md` (the spec) — together they cover what, why, and
 > how-far-we've-gotten.
 
-## Status at checkpoint
+## Status at checkpoint (2026-07-16)
 
 - `cargo check --workspace` — **passes**
 - `cargo test -p health-core` — **8/8 unit tests pass**
+- `cargo test -p health-db` — **13/13 Postgres integration tests pass** (5.10)
 - Workspace skeleton with five crates (`core`, `db`, `auth`, `web`, `bot`)
   wired up and compiling. `core` is implemented; `db` has its 8 repository
-  traits + a Postgres `SqlxRepository` impl; the others are stubs.
-- All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done).
-  No frontend yet. No CI yet.
+  traits + a Postgres `SqlxRepository` impl + integration tests; the others
+  are stubs.
+- All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done)
+  in **file-based format** (sqlx 0.8 requires `.up.sql`/`.down.sql` files,
+  not subdirectories).
+- Config lib chosen: `config` crate (env-over-defaults, already in workspace
+  deps). Session cookie lib chosen: `cookie` crate (signed).
+- No frontend yet. No CI yet.
 
 Continue from the ["TODO"](#todo) section below.
 
@@ -123,7 +129,9 @@ Location: `/home/lukas/documents/coding/rust/matrix-running`
 
 ## 3. Schema we will create (mirrors DESIGN.md §"Database Schema")
 
-Migration files go under `migrations/<timestamp>_<name>/{up,down}.sql`.
+Migration files go under `migrations/<timestamp>_<name>.up.sql` and
+`migrations/<timestamp>_<name>.down.sql` (single files, **not** per-migration
+subdirectories — sqlx 0.8 `Migrator::new` ignores directory entries).
 SQLx migration runner loads them at startup from `MIGRATIONS_DIR` (see
 `crates/db/src/lib.rs`).
 
@@ -197,8 +205,8 @@ health_tracker/
 │   │       │                       impls + 8 passing tests
 │   │       └── duration_ext.rs     time::Duration → std::time::Duration helpers
 │   ├── db/                         ✅ traits + SqlxRepository impl (5.9 done;
-│   │   │                              SQLite unit tests pending in 5.10)
-│   │   ├── Cargo.toml             (sqlx + sqlite + postgres + sha2 + rand + hex)
+│   │   │                              5.10 integration tests done)
+│   │   ├── Cargo.toml             (sqlx + postgres + sha2 + rand + hex; no sqlite)
 │   │   └── src/
 │   │       ├── lib.rs             re-exports + module docs
 │   │       ├── error.rs           DbError (thiserror): NotFound/Conflict/
@@ -212,14 +220,23 @@ health_tracker/
 │   ├── web/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 │   └── bot/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 ├── migrations/                     ✅ 8 Postgres migrations present
-│   ├── 0001_create_users/{up,down}.sql
-│   ├── 0002_create_oidc_state/{up,down}.sql
-│   ├── 0003_create_exercise_sessions/{up,down}.sql
-│   ├── 0004_create_weight_exercises/{up,down}.sql
-│   ├── 0005_create_running_sessions/{up,down}.sql
-│   ├── 0006_create_core_exercises/{up,down}.sql
-│   ├── 0007_create_heartrate_samples/{up,down}.sql
-│   └── 0008_create_api_tokens/{up,down}.sql
+│   │                                 (file-based per sqlx 0.8)
+│   ├── 0001_create_users.up.sql
+│   ├── 0001_create_users.down.sql
+│   ├── 0002_create_oidc_state.up.sql
+│   ├── 0002_create_oidc_state.down.sql
+│   ├── 0003_create_exercise_sessions.up.sql
+│   ├── 0003_create_exercise_sessions.down.sql
+│   ├── 0004_create_weight_exercises.up.sql
+│   ├── 0004_create_weight_exercises.down.sql
+│   ├── 0005_create_running_sessions.up.sql
+│   ├── 0005_create_running_sessions.down.sql
+│   ├── 0006_create_core_exercises.up.sql
+│   ├── 0006_create_core_exercises.down.sql
+│   ├── 0007_create_heartrate_samples.up.sql
+│   ├── 0007_create_heartrate_samples.down.sql
+│   ├── 0008_create_api_tokens.up.sql
+│   └── 0008_create_api_tokens.down.sql
 ├── frontend/                       ❌ empty dir (no Vite project yet)
 └── .gitea/workflows/               ❌ empty dir
 ```
@@ -292,9 +309,9 @@ The decisions baked in so far:
 - **`SqlxRepository` targets Postgres (`PgPool`) concretely, not a
   generic `AnyPool`.** PG-specific types (`PgInterval`, `BYTEA`,
   `gen_random_uuid()`) would be lost behind `Any`. The trait surface
-  (`SessionsRepository` etc.) is still backend-agnostic, so a future
-  `SqliteRepository` impl of the same traits can coexist without
-  touching `web` / `bot`. That is the open decision for 5.10.
+  (`SessionsRepository` etc.) is still backend-agnostic, but **SQLite
+  is not used** — no `SqliteRepository` will be written (per decision
+  in 5.10).
 - **Runtime `sqlx::query_as` rather than the `query!` macro** so the
   crate builds without a live `DATABASE_URL` or a `.sqlx/` offline cache
   (Phase 6 item 5.38 generates the cache; adopting the macros then is a
@@ -326,22 +343,16 @@ The decisions baked in so far:
   `VALUES` insert is a future optimisation once watch export sizes
   warrant it.
 
-### SQLite test strategy (for item 5.10)
+### Test strategy (decided in 5.10)
 
-Postgres-only migrations are fine for production but break the
-`#[sqlx::test]` SQLite-in-memory tier promised by `DESIGN.md`. Two
-options, to pick when 5.10 is started:
+**Postgres testcontainer only; local dev needs Docker running. No SQLite.**
 
-1. **Parallel migration set** under `migrations_sqlite/<n>_<name>/`
-   with `TEXT` UUIDs, `INTEGER` durations, and `BLOB` GPX. The repo
-   impls run against whichever set the `SqlitePool`/`PgPool` was built
-   with. Doubles surface area but keeps the unit tier pure-SQLite.
-2. **PG-only `#[sqlx::test]` with `testcontainers`** — drop SQLite
-   entirely; every `db` unit test spins up a Postgres container.
-   Slower CI but no duplicate migrations.
-
-Lean toward option 1 for speed, fall back to option 2 if SQLite type
-friction (e.g. no `INTERVAL`) becomes unmanageable.
+The integration tests in `crates/db/tests/repo_integration.rs` connect to a
+hardcoded pool at `postgresql://postgres:password@172.17.0.2/postgres`
+(overridable via `DATABASE_URL` env var). Tests are serialised with
+`serial_test::serial` and `TRUNCATE` all tables before each run, sharing a
+single `OnceLock`-initialised `PgPool`. This avoids the testcontainers crate
+dependency while still requiring only Docker.
 
 ## 5. <a name="todo"></a>TODO
 
@@ -366,10 +377,11 @@ the reference repo to lift from where applicable.
       `OidcStateRepository`, `ApiTokenRepository`) and a
       `SqlxRepository` impl. Replace `workout_tracker`'s closed
       `Database` enum with trait objects (design §Testability).
-- [ ] **5.10** SQLite in-memory unit tests for the repo impls (design
-      §Testability, db tier 1). Use `#[sqlx::test]`.
-- [ ] **5.11** Optional: Postgres Testcontainers integration tier
-      (design §Testability, db tier 2).
+- [x] **5.10** Postgres integration tests for the repo impls (design
+      §Testability). 13 tests covering every trait method, serialised
+      against a shared `POOL` + `TRUNCATE` between runs. **No SQLite** —
+      Postgres testcontainer only (Docker required). Decision recorded
+      above under "Test strategy".
 
 ### Phase 2 — auth (unblocks web)
 
@@ -504,11 +516,8 @@ needs at least Rust 1.85 stable, but some parent repos required nightly.
 
 ## 8. Where to start next session
 
-Phase 1 items 5.1–5.9 are done. Next up: **5.10** — write `#[sqlx::test]`
-unit tests for the `SqlxRepository` impls. Decide the SQLite strategy
-first (see "SQLite test strategy" above): the current `SqlxRepository`
-targets **Postgres** (`PgPool`), and the migrations are PG-only. Either
-(a) maintain a parallel `migrations_sqlite/` set and add a `SqliteRepository`,
-or (b) drop SQLite and run `#[sqlx::test]` against a Postgres testcontainers
-instance in CI. Once 5.10 passes against whichever backend, move to
-Phase 2 (auth, item 5.12).
+Phase 1 items 5.1–5.10 are done. Next up: **Phase 2 (auth)**, starting
+with **5.12** — port `setup_oidc_client` from `workout_tracker/src/oidc.rs`
+into `crates/auth/src/oidc.rs`. See §"Adaptation needed when porting
+`oidc.rs`" above for the actix→axum swap list (especially item 4: the
+`panic!` at `oidc.rs:223` becomes `OidcCallbackError::MissingIdToken`).
