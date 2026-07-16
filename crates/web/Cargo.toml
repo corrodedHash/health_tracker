@@ -29,6 +29,18 @@ toml         = { workspace = true }
 tracing      = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest      = { workspace = true }
+config       = { workspace = true }
+cookie       = { workspace = true }
+sqlx         = { workspace = true }
+gpx          = { workspace = true }
+haversine-rs = { workspace = true }
+mockall      = { workspace = true }
+hex          = { workspace = true }
+time         = { workspace = true }
+
+[dev-dependencies]
+tower        = { workspace = true, features = ["util"] }
+http-body-util = { workspace = true }
 
 [lints]
 workspace = true

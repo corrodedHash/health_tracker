@@ -59,7 +59,7 @@ pub fn parse_session_cookie(cookie_header: &str, key: &Key) -> Result<SessionDat
     }
 
     let mut jar = CookieJar::new();
-    jar.signed_mut(key).add(cookie.into_owned());
+    jar.add(cookie.into_owned());
 
     let signed_cookie = jar
         .signed(key)
