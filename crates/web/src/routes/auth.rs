@@ -58,7 +58,7 @@ pub async fn login(
             .map_or_else(|| format!("{base}/"), |t| format!("{base}/?resume_token={t}"));
 
         return Ok((
-            StatusCode::OK,
+            StatusCode::FOUND,
             [(header::SET_COOKIE, cookie_str)],
             Redirect::to(&location),
         )
