@@ -9,8 +9,10 @@
 - `cargo check --workspace` — **passes**
 - `cargo test -p health-core` — **8/8 unit tests pass**
 - Workspace skeleton with five crates (`core`, `db`, `auth`, `web`, `bot`)
-  is wired up and compiling. `core` is implemented; the others are stubs.
-- No migrations yet. No frontend yet. No CI yet.
+  wired up and compiling. `core` is implemented; `db` has its 8 repository
+  traits + a Postgres `SqlxRepository` impl; the others are stubs.
+- All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done).
+  No frontend yet. No CI yet.
 
 Continue from the ["TODO"](#todo) section below.
 
@@ -194,13 +196,30 @@ health_tracker/
 │   │       │                       NewOidcState, ValidationError, validation
 │   │       │                       impls + 8 passing tests
 │   │       └── duration_ext.rs     time::Duration → std::time::Duration helpers
-│   ├── db/                         🚧 STUB: only Cargo.toml + 5-line lib.rs
-│   │   ├── Cargo.toml             (sqlx + sqlite + postgres features wired)
-│   │   └── src/lib.rs             MIGRATIONS_DIR constant only
+│   ├── db/                         ✅ traits + SqlxRepository impl (5.9 done;
+│   │   │                              SQLite unit tests pending in 5.10)
+│   │   ├── Cargo.toml             (sqlx + sqlite + postgres + sha2 + rand + hex)
+│   │   └── src/
+│   │       ├── lib.rs             re-exports + module docs
+│   │       ├── error.rs           DbError (thiserror): NotFound/Conflict/
+│   │       │                      Invalid/KindMismatch/Sqlx
+│   │       ├── traits.rs          8 async repository traits (mock boundary)
+│   │       ├── repo.rs            SqlxRepository<PgPool> impl of all 8 traits
+│   │       │                      + row structs (FromRow) + interval helpers
+│   │       │                      + enforce_kind tx guard + sha256 token issue
+│   │       └── migrate.rs         run_migrations(PgPool) from MIGRATIONS_DIR
 │   ├── auth/                       🚧 STUB: only Cargo.toml + doc-comment lib.rs
 │   ├── web/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 │   └── bot/                        🚧 STUB: only Cargo.toml + 4-line main.rs
-├── migrations/                     ❌ empty dir (no SQL yet)
+├── migrations/                     ✅ 8 Postgres migrations present
+│   ├── 0001_create_users/{up,down}.sql
+│   ├── 0002_create_oidc_state/{up,down}.sql
+│   ├── 0003_create_exercise_sessions/{up,down}.sql
+│   ├── 0004_create_weight_exercises/{up,down}.sql
+│   ├── 0005_create_running_sessions/{up,down}.sql
+│   ├── 0006_create_core_exercises/{up,down}.sql
+│   ├── 0007_create_heartrate_samples/{up,down}.sql
+│   └── 0008_create_api_tokens/{up,down}.sql
 ├── frontend/                       ❌ empty dir (no Vite project yet)
 └── .gitea/workflows/               ❌ empty dir
 ```
@@ -230,6 +249,100 @@ The decisions baked in so far:
   uses `time::Duration` (gpx/haversine) and the rest use
   `std::time::Duration`. Single conversion point.
 
+- **Migrations are Postgres-only** (items 5.1–5.8). They use `UUID`,
+  `TIMESTAMPTZ`, `INTERVAL`, `BYTEA`, `gen_random_uuid()`, and
+  `INSERT ... ON CONFLICT`. SQLite in-memory unit tests (item 5.10)
+  will need a separate strategy — see "SQLite test strategy" below.
+
+- **Cross-table kind enforcement is not a DB `CHECK`.** Postgres
+  `CHECK` constraints cannot reference other tables (no subqueries).
+  Each child table's `up.sql` documents this; the `SqlxRepository`
+  insert path (item 5.9) inserts parent + child in one tx and refuses
+  a child whose discriminator doesn't match. A trigger-based DB guard
+  is recorded as a future option, not done now.
+
+- **`users.id`, `exercise_sessions.id`, `api_tokens.id` via
+  `gen_random_uuid()`** (built in since Postgres 13). No `CREATE
+  EXTENSION pgcrypto`. Drop the extension if a PG 12 target is needed.
+
+- **`duration` stored as PostgreSQL `INTERVAL`.** Maps to
+  `std::time::Duration` via SQLx's `sqlx::postgres::types::PgInterval`
+  Decode/Encode. `chrono::Duration` and `time::Duration` interop goes
+  through `core::duration_ext`.
+
+- **`api_tokens.token_hash` is `CHAR(64)`** holding lowercase SHA-256
+  hex. `CHAR` rather than `TEXT` because the length is fixed; the
+  `UNIQUE` constraint plus index covers the `verify()` lookup path.
+
+- **`heartrate_samples` adds `CHECK (bpm > 0)` and
+  `CHECK (offset_secs >= 0)`** at the DB level on top of the
+  `health_core` validation — defense in depth, cheap to enforce, and
+  the table is bulk-loaded by scrapers that bypass the Rust validation
+  layer.
+
+- **Indexing** decided up front:
+  - `exercise_sessions(user_id, started_at DESC)` — list-most-recent
+    for a user.
+  - `exercise_sessions(user_id, kind, started_at DESC)` — filtered list
+    endpoint `GET /api/exercise-sessions?kind=&from=&to=`.
+  - `api_tokens(user_id)` — manage-tokens page.
+  - `heartrate_samples` PK `(session_id, offset_secs)` already serves
+    the within-session scan, no extra index.
+
+- **`SqlxRepository` targets Postgres (`PgPool`) concretely, not a
+  generic `AnyPool`.** PG-specific types (`PgInterval`, `BYTEA`,
+  `gen_random_uuid()`) would be lost behind `Any`. The trait surface
+  (`SessionsRepository` etc.) is still backend-agnostic, so a future
+  `SqliteRepository` impl of the same traits can coexist without
+  touching `web` / `bot`. That is the open decision for 5.10.
+- **Runtime `sqlx::query_as` rather than the `query!` macro** so the
+  crate builds without a live `DATABASE_URL` or a `.sqlx/` offline cache
+  (Phase 6 item 5.38 generates the cache; adopting the macros then is a
+  drop-in). Trade-off: no compile-time SQL validation until 5.38, which
+  `#[sqlx::test]` integration in 5.10 will catch at test time instead.
+- **Row mapping via db-local `FromRow` structs + `From`/`TryFrom` into
+  `health_core` types.** The orphan rule forbids implementing
+  `sqlx::FromRow` on `health_core` types in `health-db`. Keeping the
+  row structs private to `repo.rs` also documents the wire shape in
+  one place.
+- **`DbError::KindMismatch` enforces the CTI discriminator inside the
+  child-insert transaction** (`enforce_kind` in `repo.rs`). This is the
+  layer that closes the loophole left by Postgres `CHECK` not being
+  able to reference other tables. `NotFound` is returned when the
+  parent row is absent mid-tx.
+- **`interval_to_std` rejects months/days.** Workout durations never
+  span calendar units; an `INTERVAL` coming back with non-zero
+  months/days would silently lose data, so it surfaces as
+  `DbError::Invalid` instead.
+- **`ApiTokenRepository::issue` generates a 32-byte random token with
+  `rand::thread_rng().fill_bytes`, hex-encodes it to a 64-char
+  cleartext, and stores `sha256_hex(cleartext)`.** `health_core::NewApiToken.token`
+  is the only place the cleartext exists. `verify` rehashes the
+  incoming bearer string and matches on `token_hash`, then updates
+  `last_used_at`.
+- **`HeartrateRepository::insert_bulk` is per-row in a single tx**
+  using `ON CONFLICT (session_id, offset_secs) DO NOTHING` and returns
+  the count of newly inserted rows. A batched `COPY` or multi-row
+  `VALUES` insert is a future optimisation once watch export sizes
+  warrant it.
+
+### SQLite test strategy (for item 5.10)
+
+Postgres-only migrations are fine for production but break the
+`#[sqlx::test]` SQLite-in-memory tier promised by `DESIGN.md`. Two
+options, to pick when 5.10 is started:
+
+1. **Parallel migration set** under `migrations_sqlite/<n>_<name>/`
+   with `TEXT` UUIDs, `INTEGER` durations, and `BLOB` GPX. The repo
+   impls run against whichever set the `SqlitePool`/`PgPool` was built
+   with. Doubles surface area but keeps the unit tier pure-SQLite.
+2. **PG-only `#[sqlx::test]` with `testcontainers`** — drop SQLite
+   entirely; every `db` unit test spins up a Postgres container.
+   Slower CI but no duplicate migrations.
+
+Lean toward option 1 for speed, fall back to option 2 if SQLite type
+friction (e.g. no `INTERVAL`) becomes unmanageable.
+
 ## 5. <a name="todo"></a>TODO
 
 Roughly priority-ordered. Each item references the design section and
@@ -237,17 +350,17 @@ the reference repo to lift from where applicable.
 
 ### Phase 1 — db (high priority, unblocks everything else)
 
-- [ ] **5.1** Create migration `0001_create_users/up.sql` & `down.sql`
-- [ ] **5.2** Create `0002_create_oidc_state` (port verbatim from
+- [x] **5.1** Create migration `0001_create_users/up.sql` & `down.sql`
+- [x] **5.2** Create `0002_create_oidc_state` (port verbatim from
       `workout_tracker/migrations/2025-12-07-202324-0000_add_oidc_table`)
-- [ ] **5.3** Create `0003_create_exercise_sessions`
-- [ ] **5.4** Create `0004_create_weight_exercises`
-- [ ] **5.5** Create `0005_create_running_sessions` (with `gpx_data
+- [x] **5.3** Create `0003_create_exercise_sessions`
+- [x] **5.4** Create `0004_create_weight_exercises`
+- [x] **5.5** Create `0005_create_running_sessions` (with `gpx_data
       BYTEA`)
-- [ ] **5.6** Create `0006_create_core_exercises`
-- [ ] **5.7** Create `0007_create_heartrate_samples`
-- [ ] **5.8** Create `0008_create_api_tokens`
-- [ ] **5.9** In `crates/db/src/`: define traits
+- [x] **5.6** Create `0006_create_core_exercises`
+- [x] **5.7** Create `0007_create_heartrate_samples`
+- [x] **5.8** Create `0008_create_api_tokens`
+- [x] **5.9** In `crates/db/src/`: define traits
       (`SessionsRepository`, `WeightRepository`, `CoreRepository`,
       `RunningRepository`, `HeartrateRepository`, `UsersRepository`,
       `OidcStateRepository`, `ApiTokenRepository`) and a
@@ -391,8 +504,11 @@ needs at least Rust 1.85 stable, but some parent repos required nightly.
 
 ## 8. Where to start next session
 
-Begin at **Phase 1 → item 5.1**: write `migrations/0001_create_users/`
-then `0003_create_exercise_sessions` etc. Once all 8 migrations exist,
-open `crates/db/src/lib.rs` and replace the stub with traits + a
-`SqlxRepository` impl. Run `cargo test -p health-db` against SQLite
-in-memory to validate row mapping before moving on to `auth`.
+Phase 1 items 5.1–5.9 are done. Next up: **5.10** — write `#[sqlx::test]`
+unit tests for the `SqlxRepository` impls. Decide the SQLite strategy
+first (see "SQLite test strategy" above): the current `SqlxRepository`
+targets **Postgres** (`PgPool`), and the migrations are PG-only. Either
+(a) maintain a parallel `migrations_sqlite/` set and add a `SqliteRepository`,
+or (b) drop SQLite and run `#[sqlx::test]` against a Postgres testcontainers
+instance in CI. Once 5.10 passes against whichever backend, move to
+Phase 2 (auth, item 5.12).

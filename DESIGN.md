@@ -50,19 +50,49 @@ gets its own child table whose PK is also a FK (with `ON DELETE CASCADE`) back t
 the parent. This gives real column types and constraints while keeping a single FK
 target for heartrate data.
 
+The full migration set lives in `migrations/` (eight directories,
+`0001`..`0008`, each with `up.sql` and `down.sql`). The sketch below
+mirrors those files; authoritative SQL is the migration files
+themselves.
+
 ```sql
--- Parent — one row per workout, any type
+-- 0001_create_users
+CREATE TABLE users (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    external_id  TEXT NOT NULL UNIQUE,           -- OIDC `sub` claim
+    display_name TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 0002_create_oidc_state — PKCE/nonce state for in-flight OIDC logins.
+-- Renamed from `workout_tracker`'s `oidc` -> `oidc_state` to avoid
+-- confusion with the OIDC *provider*.
+CREATE TABLE oidc_state (
+    csrf           VARCHAR(255) PRIMARY KEY,
+    code_verifier  VARCHAR(255) NOT NULL,
+    nonce          VARCHAR(255) NOT NULL,
+    resume_token   VARCHAR(36),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 0003_create_exercise_sessions — parent CTI table. Adds an explicit
+-- FK to users(id) and a CHECK on the kind discriminator mirroring
+-- health_core::ExerciseKind.
 CREATE TABLE exercise_sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL,
-    kind        TEXT NOT NULL,       -- 'weight' | 'core' | 'running' | custom
+    user_id     UUID NOT NULL REFERENCES users(id),
+    kind        TEXT NOT NULL CHECK (kind IN ('weight','core','running')),
     started_at  TIMESTAMPTZ NOT NULL,
     duration    INTERVAL NOT NULL,
     notes       TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX exercise_sessions_user_started_at_idx
+    ON exercise_sessions (user_id, started_at DESC);
+CREATE INDEX exercise_sessions_user_kind_started_at_idx
+    ON exercise_sessions (user_id, kind, started_at DESC);
 
--- Weight exercises
+-- 0004_create_weight_exercises — child PK+FK with ON DELETE CASCADE.
 CREATE TABLE weight_exercises (
     session_id    UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
     exercise_name TEXT NOT NULL,
@@ -72,14 +102,14 @@ CREATE TABLE weight_exercises (
     quality       INT                -- 1–10 subjective feel
 );
 
--- Running sessions with optional GPX blob
+-- 0005_create_running_sessions — GPX blob stored inline as BYTEA.
 CREATE TABLE running_sessions (
     session_id   UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
     distance_m   DOUBLE PRECISION NOT NULL,
     gpx_data     BYTEA              -- raw GPX file, stored as blob
 );
 
--- Core exercises (plank, dead bug, etc.)
+-- 0006_create_core_exercises — child PK+FK with ON DELETE CASCADE.
 CREATE TABLE core_exercises (
     session_id    UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
     exercise_name TEXT NOT NULL,
@@ -87,14 +117,44 @@ CREATE TABLE core_exercises (
     quality       INT
 );
 
--- Time-series data — single FK to parent works for ALL types
+-- 0007_create_heartrate_samples — time-series, composite PK, any kind.
 CREATE TABLE heartrate_samples (
     session_id   UUID NOT NULL REFERENCES exercise_sessions(id) ON DELETE CASCADE,
     offset_secs  INTEGER NOT NULL,   -- seconds from session start
     bpm          SMALLINT NOT NULL,
-    PRIMARY KEY (session_id, offset_secs)
+    PRIMARY KEY (session_id, offset_secs),
+    CHECK (bpm > 0),
+    CHECK (offset_secs >= 0)
 );
+
+-- 0008_create_api_tokens — bot bearer tokens; only SHA-256 hex stored.
+CREATE TABLE api_tokens (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    label        TEXT NOT NULL,
+    token_hash   CHAR(64) NOT NULL UNIQUE,        -- 64 lowercase hex chars
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ
+);
+CREATE INDEX api_tokens_user_id_idx ON api_tokens (user_id);
 ```
+
+### Migration conventions
+
+- **Migrations are Postgres-only** (`UUID`, `TIMESTAMPTZ`,
+  `INTERVAL`, `BYTEA`, `gen_random_uuid()`, `ON CONFLICT`). PG >= 13
+  is required (no `pgcrypto` extension).
+- **Cross-table `kind` validation is enforced in the repository layer,
+  not in DB `CHECK`.** Postgres `CHECK` cannot reference other tables.
+  Each child `up.sql` documents this; `SqlxRepository::insert_*` wraps
+  parent + child row in a single transaction and refuses the insert
+  when the discriminator doesn't match. A training-wheels trigger can
+  be added later.
+- **Down migrations are idempotent** (`DROP ... IF EXISTS`) and
+  ordered so rollback is the exact reverse of apply.
+- **SQLite in-memory unit tests** (item 5.10) need a parallel
+  migration set with portable types — see `MIGRATION.md`'s "SQLite
+  test strategy" sidebar for the two options still on the table.
 
 ### Unknown / Custom Exercises
 
@@ -321,8 +381,8 @@ Static test data lives in `crates/*/tests/fixtures/`:
 
 ## Implementation Order
 
-1. `core` — domain types, `ExerciseKind` enum with `Weight`, `Core`, `Running` variants
-2. `db` — migrations, repository traits + SQLx implementations, unit tests with SQLite
+1. `core` — domain types, `ExerciseKind` enum with `Weight`, `Core`, `Running` variants (**done**)
+2. `db` — migrations, repository traits + SQLx implementations, unit tests with SQLite. Migrations present; repository traits + impl in progress.
 3. `auth` — OIDC token validation, session management
 4. `web` — basic CRUD endpoints behind OIDC, static file serving
 5. `frontend` — login, session list, exercise form (shadcn + echarts)

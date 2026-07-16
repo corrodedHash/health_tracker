@@ -49,6 +49,9 @@ openidconnect = "4.0"
 
 # Database
 sqlx          = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "sqlite", "uuid", "chrono", "macros", "migrate", "json"] }
+sha2          = "0.10"
+rand          = "0.8"
+hex           = "0.4"
 
 # Bot
 matrix-sdk    = { version = "0.11", default-features = false, features = ["native-tls"] }
