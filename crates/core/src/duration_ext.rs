@@ -1,7 +1,7 @@
 //! Helpers for converting between the various duration representations
 //! that make appearances across the crate graph.
 //!
-//! The DB stores durations as PostgreSQL `INTERVAL`. SQLx exposes those as
+//! The DB stores durations as `PostgreSQL` `INTERVAL`. `SQLx` exposes those as
 //! `chrono::Duration`. The GPX bot computes distances with the `time`
 //! crate (`time::Duration`). The HTTP API uses `std::time::Duration`.
 //! This module is the single place that knows the conversions so the
@@ -23,7 +23,7 @@ pub fn from_time(t: time::Duration) -> StdDuration {
 /// Round a `std::time::Duration` to whole seconds as `f64`. Useful for
 /// serialising into JSON when nanosecond precision is unwanted.
 #[must_use]
-pub fn secs_f64(d: StdDuration) -> f64 {
+pub const fn secs_f64(d: StdDuration) -> f64 {
     d.as_secs_f64()
 }
 

@@ -1,4 +1,4 @@
-//! The concrete repository implementation against Postgres via SQLx.
+//! The concrete repository implementation against Postgres via `SQLx`.
 //!
 //! All eight traits in [`crate::traits`] are implemented on a single
 //! [`SqlxRepository`] struct that owns a [`sqlx::PgPool`]. Queries use
@@ -44,14 +44,14 @@ pub struct SqlxRepository {
 
 impl SqlxRepository {
     #[must_use]
-    pub fn new(pool: PgPool) -> Self {
+    pub const fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     /// Borrow the underlying pool — useful for callers that need to
     /// run raw queries (e.g. the migration runner at startup).
     #[must_use]
-    pub fn pool(&self) -> &PgPool {
+    pub const fn pool(&self) -> &PgPool {
         &self.pool
     }
 }
@@ -234,7 +234,7 @@ impl From<ApiTokenRow> for ApiToken {
 // Helpers
 // ===========================================================================
 
-/// Convert a `std::time::Duration` into the `PgInterval` SQLx expects
+/// Convert a `std::time::Duration` into the `PgInterval` `SQLx` expects
 /// for an `INTERVAL` bind parameter.
 fn std_to_interval(d: Duration) -> PgInterval {
     PgInterval {
@@ -262,7 +262,7 @@ fn interval_to_std(i: PgInterval) -> Result<Duration, DbError> {
     Ok(Duration::from_micros(micros.try_into().unwrap_or(u64::MAX)))
 }
 
-/// Map a SQLx error to a [`DbError`], recognising unique/FK/CHECK
+/// Map a `SQLx` error to a [`DbError`], recognising unique/FK/CHECK
 /// violations so callers can branch on them.
 fn map_err(e: sqlx::Error) -> DbError {
     if let Some(db) = e.as_database_error() {

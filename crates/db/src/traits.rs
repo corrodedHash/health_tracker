@@ -5,8 +5,8 @@
 //! share one signature surface. See `DESIGN.md` §"Testability".
 //!
 //! The single concrete impl lives in [`crate::repo`] and targets
-//! Postgres (`sqlx::PgPool`). A SQLite in-memory impl is deferred to
-//! Phase 1 item 5.10 (see `MIGRATION.md`'s "SQLite test strategy").
+//! Postgres (`sqlx::PgPool`). A `SQLite` in-memory impl is deferred to
+//! Phase 1 item 5.10 (see `MIGRATION.md`'s "`SQLite` test strategy").
 
 use health_core::{
     ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample, NewApiToken,

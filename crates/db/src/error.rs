@@ -26,7 +26,7 @@ pub enum DbError {
     #[error("kind mismatch: parent kind is {parent}, child expects {child}")]
     KindMismatch { parent: String, child: String },
 
-    /// Anything else bubbling up from SQLx.
+    /// Anything else bubbling up from `SQLx`.
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }

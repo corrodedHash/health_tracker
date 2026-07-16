@@ -73,6 +73,7 @@ pedantic = "warn"
 nursery = "warn"
 cargo = "warn"
 multiple_crate_versions = { level = "allow", priority = 1 }
+cargo_common_metadata = { level = "allow", priority = 1 }
 unwrap_used = "warn"
 expect_used = "warn"
 

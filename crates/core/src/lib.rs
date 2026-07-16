@@ -16,6 +16,7 @@
 //!   2. a new child struct parallel to [`WeightSession`] / [`CoreSession`] /
 //!      [`RunningSession`],
 //!   3. the new row in the `db` crate.
+//!
 //! Heartrate, auth and cross-cutting queries work unchanged.
 
 pub mod duration_ext;
@@ -50,7 +51,7 @@ impl ExerciseKind {
     pub const ALL: [Self; 3] = [Self::Weight, Self::Core, Self::Running];
 
     #[must_use]
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Weight => "weight",
             Self::Core => "core",
@@ -257,7 +258,7 @@ impl NewExerciseSession {
     ///
     /// # Errors
     /// Returns [`ValidationError::NonPositiveDuration`] if `duration` is zero.
-    pub fn validate(&self) -> Result<(), ValidationError> {
+    pub const fn validate(&self) -> Result<(), ValidationError> {
         if self.duration.is_zero() {
             return Err(ValidationError::NonPositiveDuration(self.duration));
         }
@@ -280,10 +281,10 @@ impl WeightSession {
         if self.reps <= 0 {
             return Err(ValidationError::NonPositiveReps(self.reps));
         }
-        if let Some(q) = self.quality {
-            if !(1..=10).contains(&q) {
-                return Err(ValidationError::QualityOutOfRange(q));
-            }
+        if let Some(q) = self.quality
+            && !(1..=10).contains(&q)
+        {
+            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
@@ -296,10 +297,10 @@ impl CoreSession {
     /// # Errors
     /// Returns [`ValidationError::QualityOutOfRange`] when present and outside 1..=10.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        if let Some(q) = self.quality {
-            if !(1..=10).contains(&q) {
-                return Err(ValidationError::QualityOutOfRange(q));
-            }
+        if let Some(q) = self.quality
+            && !(1..=10).contains(&q)
+        {
+            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
@@ -350,7 +351,7 @@ mod tests {
             started_at: DateTime::parse_from_rfc3339("2026-07-16T08:00:00Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            duration: std::time::Duration::from_secs(60),
+            duration: std::time::Duration::from_mins(1),
             notes: None,
         }
     }

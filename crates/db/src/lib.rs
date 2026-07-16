@@ -1,5 +1,5 @@
-//! `health-db` — SQLx repository implementations + migrations for the
-//! health_tracker workspace.
+//! `health-db` — `SQLx` repository implementations + migrations for the
+//! `health_tracker` workspace.
 //!
 //! See `MIGRATION.md` and `DESIGN.md` for the migration plan and schema.
 //!
