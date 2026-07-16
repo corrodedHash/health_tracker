@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use health_bot::api_client::{ApiConfig, ApiClient, ReqwestApiClient};
+use health_bot::api_client::{ApiClient, ApiConfig, ReqwestApiClient};
 use health_bot::gpx::process_gpx;
 use health_bot::matrix_auth::MatrixLoginConfig;
 use health_bot::matrix_client::{MatrixClient, MatrixSdkClient};

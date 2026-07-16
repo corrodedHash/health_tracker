@@ -66,7 +66,10 @@ impl ApiClient for ReqwestApiClient {
         distance_m: f64,
         duration: std::time::Duration,
     ) -> anyhow::Result<Uuid> {
-        let url = format!("{}/api/runs/gpx", self.config.base_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/runs/gpx",
+            self.config.base_url.trim_end_matches('/')
+        );
         let part = reqwest::multipart::Part::bytes(bytes.to_vec())
             .file_name("run.gpx")
             .mime_str("application/gpx+xml")?;

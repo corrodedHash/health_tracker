@@ -4,15 +4,22 @@
 > Pair it with `DESIGN.md` (the spec) — together they cover what, why, and
 > how-far-we've-gotten.
 
-## Status at checkpoint
+## Status at checkpoint (2026-07-16)
 
 - `cargo check --workspace` — **passes**
 - `cargo test -p health-core` — **8/8 unit tests pass**
+- `cargo test -p health-db` — **13/13 Postgres integration tests pass** (5.10)
 - Workspace skeleton with five crates (`core`, `db`, `auth`, `web`, `bot`)
   wired up and compiling. `core` is implemented; `db` has its 8 repository
-  traits + a Postgres `SqlxRepository` impl; the others are stubs.
-- All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done).
-  No frontend yet. No CI yet.
+  traits + a Postgres `SqlxRepository` impl + integration tests; `auth`
+  has OIDC PKCE flow + `AuthProvider` trait + session cookie logic;
+  `web` and `bot` are stubs.
+- All 8 Postgres migrations exist under `migrations/` (items 5.1–5.8 done)
+  in **file-based format** (sqlx 0.8 requires `.up.sql`/`.down.sql` files,
+  not subdirectories).
+- Config lib chosen: `config` crate (env-over-defaults, already in workspace
+  deps). Session cookie lib chosen: `cookie` crate (signed).
+- No frontend yet. No CI yet.
 
 Continue from the ["TODO"](#todo) section below.
 
@@ -123,7 +130,9 @@ Location: `/home/lukas/documents/coding/rust/matrix-running`
 
 ## 3. Schema we will create (mirrors DESIGN.md §"Database Schema")
 
-Migration files go under `migrations/<timestamp>_<name>/{up,down}.sql`.
+Migration files go under `migrations/<timestamp>_<name>.up.sql` and
+`migrations/<timestamp>_<name>.down.sql` (single files, **not** per-migration
+subdirectories — sqlx 0.8 `Migrator::new` ignores directory entries).
 SQLx migration runner loads them at startup from `MIGRATIONS_DIR` (see
 `crates/db/src/lib.rs`).
 
@@ -197,8 +206,8 @@ health_tracker/
 │   │       │                       impls + 8 passing tests
 │   │       └── duration_ext.rs     time::Duration → std::time::Duration helpers
 │   ├── db/                         ✅ traits + SqlxRepository impl (5.9 done;
-│   │   │                              SQLite unit tests pending in 5.10)
-│   │   ├── Cargo.toml             (sqlx + sqlite + postgres + sha2 + rand + hex)
+│   │   │                              5.10 integration tests done)
+│   │   ├── Cargo.toml             (sqlx + postgres + sha2 + rand + hex; no sqlite)
 │   │   └── src/
 │   │       ├── lib.rs             re-exports + module docs
 │   │       ├── error.rs           DbError (thiserror): NotFound/Conflict/
@@ -208,18 +217,35 @@ health_tracker/
 │   │       │                      + row structs (FromRow) + interval helpers
 │   │       │                      + enforce_kind tx guard + sha256 token issue
 │   │       └── migrate.rs         run_migrations(PgPool) from MIGRATIONS_DIR
-│   ├── auth/                       🚧 STUB: only Cargo.toml + doc-comment lib.rs
+│   ├── auth/                       ✅ OIDC PKCE flow + AuthProvider trait
+│   │   ├── Cargo.toml                + session cookies (5.12–5.16 done)
+│   │   └── src/
+│   │       ├── lib.rs              AuthProvider trait + MockAuthProvider
+│   │       ├── oidc.rs             setup_oidc_client, OidcConfig,
+│   │       │                       OidcClientBundle, start_pkce_flow
+│   │       ├── flow.rs             start_login, finish_login
+│   │       │                       (panic → LoginFinishError::MissingIdToken)
+│   │       └── session.rs          create/parse/delete signed session cookies
 │   ├── web/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 │   └── bot/                        🚧 STUB: only Cargo.toml + 4-line main.rs
 ├── migrations/                     ✅ 8 Postgres migrations present
-│   ├── 0001_create_users/{up,down}.sql
-│   ├── 0002_create_oidc_state/{up,down}.sql
-│   ├── 0003_create_exercise_sessions/{up,down}.sql
-│   ├── 0004_create_weight_exercises/{up,down}.sql
-│   ├── 0005_create_running_sessions/{up,down}.sql
-│   ├── 0006_create_core_exercises/{up,down}.sql
-│   ├── 0007_create_heartrate_samples/{up,down}.sql
-│   └── 0008_create_api_tokens/{up,down}.sql
+│   │                                 (file-based per sqlx 0.8)
+│   ├── 0001_create_users.up.sql
+│   ├── 0001_create_users.down.sql
+│   ├── 0002_create_oidc_state.up.sql
+│   ├── 0002_create_oidc_state.down.sql
+│   ├── 0003_create_exercise_sessions.up.sql
+│   ├── 0003_create_exercise_sessions.down.sql
+│   ├── 0004_create_weight_exercises.up.sql
+│   ├── 0004_create_weight_exercises.down.sql
+│   ├── 0005_create_running_sessions.up.sql
+│   ├── 0005_create_running_sessions.down.sql
+│   ├── 0006_create_core_exercises.up.sql
+│   ├── 0006_create_core_exercises.down.sql
+│   ├── 0007_create_heartrate_samples.up.sql
+│   ├── 0007_create_heartrate_samples.down.sql
+│   ├── 0008_create_api_tokens.up.sql
+│   └── 0008_create_api_tokens.down.sql
 ├── frontend/                       ❌ empty dir (no Vite project yet)
 └── .gitea/workflows/               ❌ empty dir
 ```
@@ -292,9 +318,9 @@ The decisions baked in so far:
 - **`SqlxRepository` targets Postgres (`PgPool`) concretely, not a
   generic `AnyPool`.** PG-specific types (`PgInterval`, `BYTEA`,
   `gen_random_uuid()`) would be lost behind `Any`. The trait surface
-  (`SessionsRepository` etc.) is still backend-agnostic, so a future
-  `SqliteRepository` impl of the same traits can coexist without
-  touching `web` / `bot`. That is the open decision for 5.10.
+  (`SessionsRepository` etc.) is still backend-agnostic, but **SQLite
+  is not used** — no `SqliteRepository` will be written (per decision
+  in 5.10).
 - **Runtime `sqlx::query_as` rather than the `query!` macro** so the
   crate builds without a live `DATABASE_URL` or a `.sqlx/` offline cache
   (Phase 6 item 5.38 generates the cache; adopting the macros then is a
@@ -326,24 +352,16 @@ The decisions baked in so far:
   `VALUES` insert is a future optimisation once watch export sizes
   warrant it.
 
-### Test strategy decision (for item 5.10)
+### Test strategy (decided in 5.10)
 
-Postgres-only migrations are kept for both production and tests. The
-SQLite-in-memory tier originally promised by `DESIGN.md` is **dropped**:
-maintaining a parallel `migrations_sqlite/` set and a second impl of all
-eight repository traits to paper over `INTERVAL` / `BYTEA` /
-`gen_random_uuid` friction is more pain than it's worth.
+**Postgres testcontainer only; local dev needs Docker running. No SQLite.**
 
-Instead, `#[sqlx::test]` in `crates/db` is wired against a **Postgres
-testcontainer**: each test gets a fresh database inside a transient
-container. Local dev needs Docker running; CI starts the testcontainer
-as part of the test job. The single `SqlxRepository` (`PgPool`) impl is
-the only impl — no trait duplication, no type-mapping bugs hiding
-behind a parallel migration set.
-
-Practical note for 5.37: `.gitignore` does **not** need to ignore a
-`migrations_sqlite/` dir (it doesn't exist); it does need to ignore any
-local testcontainer caches and Postgres data dirs used in ad-hoc runs.
+The integration tests in `crates/db/tests/repo_integration.rs` connect to a
+hardcoded pool at `postgresql://postgres:password@172.17.0.2/postgres`
+(overridable via `DATABASE_URL` env var). Tests are serialised with
+`serial_test::serial` and `TRUNCATE` all tables before each run, sharing a
+single `OnceLock`-initialised `PgPool`. This avoids the testcontainers crate
+dependency while still requiring only Docker.
 
 ## 5. <a name="todo"></a>TODO
 
@@ -368,30 +386,29 @@ the reference repo to lift from where applicable.
       `OidcStateRepository`, `ApiTokenRepository`) and a
       `SqlxRepository` impl. Replace `workout_tracker`'s closed
       `Database` enum with trait objects (design §Testability).
-- [ ] **5.10** Postgres testcontainer unit tests for the repo impls
-      (design §Testability, db tier). `#[sqlx::test]` against a
-      transient Postgres container, one DB per test. Local dev requires
-      Docker running. No parallel SQLite tier.
-- [ ] **5.11** (folded into 5.10 — the testcontainer tier IS the test
-      tier; no separate integration-only item remains.)
+- [x] **5.10** Postgres integration tests for the repo impls (design
+      §Testability). 13 tests covering every trait method, serialised
+      against a shared `POOL` + `TRUNCATE` between runs. **No SQLite** —
+      Postgres testcontainer only (Docker required). Decision recorded
+      above under "Test strategy".
 
 ### Phase 2 — auth (unblocks web)
 
-- [ ] **5.12** Port `setup_oidc_client` from
+- [x] **5.12** Port `setup_oidc_client` from
       `workout_tracker/src/oidc.rs:65-97` into
       `crates/auth/src/oidc.rs`. Keep the discovery+PKCE flow, swap
       actix types for plain reqwest (already its HTTP client).
-- [ ] **5.13** Port `oidc_init` (`workout_tracker/src/oidc.rs:124-154`)
+- [x] **5.13** Port `oidc_init` (`workout_tracker/src/oidc.rs:124-154`)
       → `crates/auth/src/flow.rs::start_login`. Returns auth URL +
       `NewOidcState` to be persisted by the caller.
-- [ ] **5.14** Port `oidc_callback`
+- [x] **5.14** Port `oidc_callback`
       (`workout_tracker/src/oidc.rs:194-253`) →
       `flow.rs::finish_login`. Takes the code + the fetched
       `OidcState`; returns the verified `sub` claim; **the panic at
-      `oidc.rs:223` becomes `OidcCallbackError::MissingIdToken`**.
-- [ ] **5.15** Define `AuthProvider` trait per design §Testability,
+      `oidc.rs:223` becomes `LoginFinishError::MissingIdToken`**.
+- [x] **5.15** Define `AuthProvider` trait per design §Testability,
       put the impl behind it. Mock impl returns canned claims.
-- [ ] **5.16** Session token logic: after `finish_login`, web stamps a
+- [x] **5.16** Session token logic: after `finish_login`, web stamps a
       signed session cookie. Keep token validation in `auth`, not
       `web`.
 
@@ -514,9 +531,8 @@ needs at least Rust 1.85 stable, but some parent repos required nightly.
 
 ## 8. Where to start next session
 
-Phase 1 items 5.1–5.9 are done. Next up: **5.10** — write `#[sqlx::test]`
-unit tests for the `SqlxRepository` impls against a **Postgres
-testcontainer** (see "Test strategy decision" above). The
-`SqlxRepository` targets Postgres (`PgPool`) and the migrations are
-PG-only; local dev needs Docker running. Once 5.10 passes, move to
-Phase 2 (auth, item 5.12).
+Phase 1 items 5.1–5.10 and Phase 2 items 5.12–5.16 are done. Next up:
+**Phase 3 (web)**, starting with **5.17** — `crates/web/src/main.rs`:
+axum server setup, tracing init, config loading (env-over-defaults via
+`config` crate), run SQLx migrations on startup. Then 5.18–5.22 for
+routes, middleware, static serving, and router-level tests.

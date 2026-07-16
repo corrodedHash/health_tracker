@@ -65,7 +65,10 @@ impl MatrixSdkClient {
             }
         });
 
-        Ok(Self { _client: client, rx })
+        Ok(Self {
+            _client: client,
+            rx,
+        })
     }
 }
 
@@ -79,7 +82,11 @@ impl MatrixClient for MatrixSdkClient {
     }
 }
 
-async fn on_stripped_state_member(room_member: StrippedRoomMemberEvent, client: Client, room: Room) {
+async fn on_stripped_state_member(
+    room_member: StrippedRoomMemberEvent,
+    client: Client,
+    room: Room,
+) {
     let Some(user_id) = client.user_id() else {
         tracing::error!("Could not get user id from client");
         return;

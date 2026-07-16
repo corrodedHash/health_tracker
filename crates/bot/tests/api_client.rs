@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use health_bot::api_client::{ApiConfig, ApiClient, ReqwestApiClient};
+use health_bot::api_client::{ApiClient, ApiConfig, ReqwestApiClient};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -62,12 +62,7 @@ async fn post_run_gpx_server_error_propagates() {
         .with_timezone(&chrono::Utc);
 
     let result = client
-        .post_run_gpx(
-            b"<gpx></gpx>",
-            started_at,
-            1000.0,
-            Duration::from_mins(10),
-        )
+        .post_run_gpx(b"<gpx></gpx>", started_at, 1000.0, Duration::from_mins(10))
         .await;
 
     let err = result.unwrap_err().to_string();
