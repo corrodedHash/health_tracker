@@ -1,0 +1,6 @@
+[matrix]
+homeserver = "https://matrix.org"
+session_file = "session.toml"
+
+[api]
+base_url = "http://localhost:3000"
