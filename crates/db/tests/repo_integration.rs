@@ -69,7 +69,7 @@ fn new_session(kind: ExerciseKind) -> NewExerciseSession {
         started_at: DateTime::parse_from_rfc3339("2026-07-16T08:00:00Z")
             .unwrap()
             .with_timezone(&Utc),
-        duration: std::time::Duration::from_secs(60 * 30),
+        duration: std::time::Duration::from_mins(30),
         notes: Some("test session".into()),
     }
 }
@@ -241,13 +241,13 @@ async fn core_insert_and_get() {
     let row = CoreSession {
         session_id: s.id,
         exercise_name: "plank".into(),
-        duration: std::time::Duration::from_secs(60),
+        duration: std::time::Duration::from_mins(1),
         quality: Some(7),
     };
     CoreRepository::insert(&r, s.id, &row).await.unwrap();
     let back = CoreRepository::get_by_session(&r, s.id).await.unwrap();
     assert_eq!(back.exercise_name, "plank");
-    assert_eq!(back.duration, std::time::Duration::from_secs(60));
+    assert_eq!(back.duration, std::time::Duration::from_mins(1));
     assert_eq!(back.quality, Some(7));
 }
 
