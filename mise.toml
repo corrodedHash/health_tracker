@@ -1,0 +1,60 @@
+# Task runner for health_tracker. The Rust toolchain itself is pinned via
+# rust-toolchain.toml (rustup-native); mise handles tasks plus a couple of
+# auxiliary dev tools (not the compiler).
+# Run `mise tasks` to list, `mise run <task>` to execute.
+
+[tools]
+# Used by the `changelog` task and mirrored by the release workflow.
+git-cliff = { version = "2.13.1", repository = "https://github.com/orhun/git-cliff" }
+
+[tasks.build]
+description = "Build the debug binaries (health-web, health-bot)"
+run = "cargo build"
+
+[tasks.release]
+description = "Build the optimized release binaries"
+run = "cargo build --release"
+
+[tasks.run-web]
+description = "Run the web server (pass args after --)"
+run = "cargo run -p health-web --"
+
+[tasks.run-bot]
+description = "Run the Matrix bot (pass args after --)"
+run = "cargo run -p health-bot --"
+
+[tasks.test]
+description = "Run the test suite"
+run = "cargo test --all-features"
+
+[tasks.fmt]
+description = "Format the code"
+run = "cargo fmt --all"
+
+[tasks.lint]
+description = "Run clippy with warnings as errors"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[tasks.fmt-check]
+description = "Verify formatting without modifying files"
+run = "cargo fmt --all -- --check"
+
+[tasks.check]
+description = "Run everything CI runs: fmt check, clippy, tests"
+depends = ["fmt-check", "lint", "test"]
+
+[tasks.changelog]
+description = "Preview the bumped version and notes for the pending (unreleased) commits"
+run = """
+echo "=== Next version ==="
+git cliff --bumped-version
+echo
+echo "=== Changelog ==="
+git cliff --unreleased
+"""
+
+# Cut a release: bump version from commits, sync Cargo.toml, commit, tag, push.
+# The logic lives in tools/release-tag.sh; see there for details.
+[tasks.tag]
+description = "Bump version from commits, then tag + push to trigger a release"
+run = "./tools/release-tag.sh"

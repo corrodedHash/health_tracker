@@ -1,0 +1,40 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "cargo fmt": "allow",
+      "cargo fmt *": "allow",
+      "cargo clippy": "allow",
+      "cargo clippy *": "allow",
+      "cargo build": "allow",
+      "cargo build *": "allow",
+      "cargo check": "allow",
+      "cargo check *": "allow",
+      "cargo test": "allow",
+      "cargo test *": "allow",
+      "INSTA_UPDATE=1 cargo test *": "allow",
+      "cargo run": "allow",
+      "cargo run *": "allow",
+      "cargo doc": "allow",
+      "cargo doc *": "allow",
+      "cargo clean": "allow",
+      "cargo clean *": "allow",
+      "mise run build": "allow",
+      "mise run release": "allow",
+      "mise run run": "allow",
+      "mise run run *": "allow",
+      "mise run test": "allow",
+      "mise run test *": "allow",
+      "mise run e2e": "allow",
+      "mise run e2e *": "allow",
+      "mise run fmt": "allow",
+      "mise run fmt-check": "allow",
+      "mise run lint": "allow",
+      "mise run check": "allow",
+      "mise run changelog": "allow",
+      "mise tasks": "allow",
+      "mise tasks *": "allow"
+    }
+  }
+}
