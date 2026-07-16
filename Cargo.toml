@@ -1,0 +1,79 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/db",
+    "crates/auth",
+    "crates/web",
+    "crates/bot",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://gitea.thasky.one/lukas/health_tracker"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# Internal crates
+health-core      = { path = "crates/core" }
+health-db        = { path = "crates/db" }
+health-auth      = { path = "crates/auth" }
+
+# Cross-cutting
+anyhow         = "1.0"
+thiserror     = "2.0"
+serde         = { version = "1.0", features = ["derive"] }
+serde_json    = "1.0"
+chrono        = { version = "0.4", features = ["serde"] }
+time          = { version = "0.3", features = ["serde-human-readable"] }
+uuid          = { version = "1.0", features = ["v4", "serde"] }
+toml          = "0.9"
+tracing       = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Runtime
+tokio         = { version = "1.45", features = ["macros", "rt-multi-thread", "signal"] }
+async-trait   = "0.1"
+
+# Web / API
+axum          = { version = "0.8", features = ["macros"] }
+tower         = "0.5"
+tower-http    = { version = "0.6", features = ["fs", "trace", "cors"] }
+reqwest       = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+
+# OIDC
+openidconnect = "4.0"
+
+# Database
+sqlx          = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "sqlite", "uuid", "chrono", "macros", "migrate", "json"] }
+
+# Bot
+matrix-sdk    = { version = "0.11", default-features = false, features = ["native-tls"] }
+gpx           = "0.10"
+haversine-rs  = "0.3"
+
+
+# === Workspace-wide lints (mirrors the strict profile from both parent repos) ===
+[workspace.lints.rust]
+unsafe_code = "warn"
+unused = "warn"
+nonstandard_style = "warn"
+future_incompatible = "warn"
+rust_2018_idioms = "warn"
+rust_2021_compatibility = "warn"
+
+[workspace.lints.clippy]
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
+multiple_crate_versions = { level = "allow", priority = 1 }
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.release]
+lto = "fat"
+opt-level = "s"
+codegen-units = 1
