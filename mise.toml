@@ -18,7 +18,7 @@ run = "cargo build --release"
 
 [tasks.run-web]
 description = "Run the web server (pass args after --)"
-env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e" }
+env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__DEV_AUTO_LOGIN = "true" }
 run = "cargo run -p health-web --"
 
 [tasks.run-bot]

@@ -1,6 +1,6 @@
 use axum::Json;
 use axum::extract::{Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
@@ -23,8 +23,48 @@ pub struct LoginParams {
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(params): Query<LoginParams>,
 ) -> Result<Response, WebError> {
+    if state.config.dev_auto_login {
+        let repo = SqlxRepository::new(state.pool.clone());
+        let user = repo
+            .upsert_by_external_id("dev-user", Some("Dev User"))
+            .await?;
+
+        let session_data = health_auth::session::SessionData {
+            user_id: user.id.to_string(),
+        };
+        let cookie_str = health_auth::session::create_session_cookie(
+            &session_data,
+            &state.cookie_key,
+            time::Duration::hours(24),
+        )
+        .map_err(WebError::Session)?;
+
+        let base = headers
+            .get(header::REFERER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|r| {
+                let idx = r.find("://")?;
+                let rest = &r[idx + 3..];
+                let slash = rest.find('/')?;
+                Some(&r[..idx + 3 + slash])
+            })
+            .unwrap_or("http://localhost:5173");
+
+        let location = params
+            .resume_token
+            .map_or_else(|| format!("{base}/"), |t| format!("{base}/?resume_token={t}"));
+
+        return Ok((
+            StatusCode::OK,
+            [(header::SET_COOKIE, cookie_str)],
+            Redirect::to(&location),
+        )
+            .into_response());
+    }
+
     let bundle = state
         .oidc_bundle
         .as_deref()

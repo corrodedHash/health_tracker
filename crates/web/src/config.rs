@@ -8,6 +8,8 @@ pub struct Config {
     pub listen_addr: String,
     pub static_dir: Option<String>,
     pub oidc: Option<OidcConfig>,
+    #[serde(default)]
+    pub dev_auto_login: bool,
 }
 
 fn default_listen_addr() -> String {
