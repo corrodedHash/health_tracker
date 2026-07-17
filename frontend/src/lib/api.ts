@@ -1,9 +1,13 @@
 import axios from "axios";
 import dayjs from "dayjs";
 import type {
+  CoreCreate,
+  CoreSession,
   ExerciseSession,
   NewExerciseSession,
+  RunningCreate,
   RunningSummary,
+  WeightCreate,
   WeightSession,
 } from "@/types";
 
@@ -64,6 +68,13 @@ export async function createSession(
   return toSession(resp.data);
 }
 
+export async function createWeightDetails(
+  sessionId: string,
+  data: WeightCreate,
+): Promise<void> {
+  await axios.post(`/api/exercise-sessions/${sessionId}/weight`, data);
+}
+
 export async function getWeightDetails(
   sessionId: string,
 ): Promise<WeightSession> {
@@ -71,6 +82,29 @@ export async function getWeightDetails(
     `/api/exercise-sessions/${sessionId}/weight`,
   );
   return { ...resp.data };
+}
+
+export async function createCoreDetails(
+  sessionId: string,
+  data: CoreCreate,
+): Promise<void> {
+  await axios.post(`/api/exercise-sessions/${sessionId}/core`, data);
+}
+
+export async function getCoreDetails(
+  sessionId: string,
+): Promise<CoreSession> {
+  const resp = await axios.get<CoreSession>(
+    `/api/exercise-sessions/${sessionId}/core`,
+  );
+  return resp.data;
+}
+
+export async function createRunningDetails(
+  sessionId: string,
+  data: RunningCreate,
+): Promise<void> {
+  await axios.post(`/api/exercise-sessions/${sessionId}/running`, data);
 }
 
 export async function getRunningSummary(
