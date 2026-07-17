@@ -46,3 +46,13 @@ export interface WeightCreate {
   reps: number;
   quality: number | null;
 }
+
+export interface CoreCreate {
+  exercise_name: string;
+  duration_secs: number;
+  quality: number | null;
+}
+
+export interface RunningCreate {
+  distance_m: number;
+}
