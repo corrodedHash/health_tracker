@@ -19,10 +19,10 @@ pub enum DbError {
     #[error("invalid input: {0}")]
     Invalid(String),
 
-    /// A kind discriminator mismatch — e.g. inserting a `weight_exercises`
+    /// A kind discriminator mismatch — e.g. inserting a `exercise_weight`
     /// row against a parent whose `kind = 'running'`. Enforced in the
     /// repository transaction because Postgres `CHECK` cannot reference
-    /// other tables (see `migrations/0004_create_weight_exercises/up.sql`).
+    /// other tables (see `migrations/0004_create_exercise_weight/up.sql`).
     #[error("kind mismatch: parent kind is {parent}, child expects {child}")]
     KindMismatch { parent: String, child: String },
 

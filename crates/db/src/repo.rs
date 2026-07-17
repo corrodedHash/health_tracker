@@ -299,7 +299,7 @@ impl SessionsRepository for SqlxRepository {
             (None, None, None) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 \
+                 FROM exercises WHERE user_id = $1 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -309,7 +309,7 @@ impl SessionsRepository for SqlxRepository {
             (Some(k), None, None) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND kind = $2 \
+                 FROM exercises WHERE user_id = $1 AND kind = $2 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -320,7 +320,7 @@ impl SessionsRepository for SqlxRepository {
             (None, Some(f), None) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND started_at >= $2 \
+                 FROM exercises WHERE user_id = $1 AND started_at >= $2 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -331,7 +331,7 @@ impl SessionsRepository for SqlxRepository {
             (None, None, Some(t)) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND started_at <= $2 \
+                 FROM exercises WHERE user_id = $1 AND started_at <= $2 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -342,7 +342,7 @@ impl SessionsRepository for SqlxRepository {
             (Some(k), Some(f), None) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
+                 FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -354,7 +354,7 @@ impl SessionsRepository for SqlxRepository {
             (Some(k), None, Some(t)) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
+                 FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -366,7 +366,7 @@ impl SessionsRepository for SqlxRepository {
             (None, Some(f), Some(t)) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
+                 FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
                  ORDER BY started_at DESC",
                 )
                 .bind(user_id)
@@ -378,7 +378,7 @@ impl SessionsRepository for SqlxRepository {
             (Some(k), Some(f), Some(t)) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                 FROM exercise_sessions \
+                 FROM exercises \
                  WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
                  ORDER BY started_at DESC",
                 )
@@ -396,7 +396,7 @@ impl SessionsRepository for SqlxRepository {
     async fn get(&self, id: Uuid) -> Result<ExerciseSession, DbError> {
         let row: SessionRow = sqlx::query_as::<_, SessionRow>(
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-             FROM exercise_sessions WHERE id = $1",
+             FROM exercises WHERE id = $1",
         )
         .bind(id)
         .fetch_one(&self.pool)
@@ -414,7 +414,7 @@ impl SessionsRepository for SqlxRepository {
         new: &NewExerciseSession,
     ) -> Result<ExerciseSession, DbError> {
         let row: SessionRow = sqlx::query_as::<_, SessionRow>(
-            "INSERT INTO exercise_sessions (user_id, kind, started_at, duration, notes) \
+            "INSERT INTO exercises (user_id, kind, started_at, duration, notes) \
              VALUES ($1, $2, $3, $4, $5) \
              RETURNING id, user_id, kind, started_at, duration, notes, created_at",
         )
@@ -430,7 +430,7 @@ impl SessionsRepository for SqlxRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, DbError> {
-        let res = sqlx::query("DELETE FROM exercise_sessions WHERE id = $1")
+        let res = sqlx::query("DELETE FROM exercises WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -448,7 +448,7 @@ impl WeightRepository for SqlxRepository {
         let mut tx = self.pool.begin().await?;
         enforce_kind(&mut tx, session_id, ExerciseKind::Weight).await?;
         sqlx::query(
-            "INSERT INTO weight_exercises \
+            "INSERT INTO exercise_weight \
              (session_id, exercise_name, weight_kg, sets, reps, quality) \
              VALUES ($1, $2, $3, $4, $5, $6)",
         )
@@ -468,7 +468,7 @@ impl WeightRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<WeightSession, DbError> {
         let row: WeightRow = sqlx::query_as::<_, WeightRow>(
             "SELECT session_id, exercise_name, weight_kg, sets, reps, quality \
-             FROM weight_exercises WHERE session_id = $1",
+             FROM exercise_weight WHERE session_id = $1",
         )
         .bind(session_id)
         .fetch_one(&self.pool)
@@ -491,7 +491,7 @@ impl CoreRepository for SqlxRepository {
         let mut tx = self.pool.begin().await?;
         enforce_kind(&mut tx, session_id, ExerciseKind::Core).await?;
         sqlx::query(
-            "INSERT INTO core_exercises \
+            "INSERT INTO exercise_core \
              (session_id, exercise_name, duration, quality) \
              VALUES ($1, $2, $3, $4)",
         )
@@ -509,7 +509,7 @@ impl CoreRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError> {
         let row: CoreRow = sqlx::query_as::<_, CoreRow>(
             "SELECT session_id, exercise_name, duration, quality \
-             FROM core_exercises WHERE session_id = $1",
+             FROM exercise_core WHERE session_id = $1",
         )
         .bind(session_id)
         .fetch_one(&self.pool)
@@ -532,7 +532,7 @@ impl RunningRepository for SqlxRepository {
         let mut tx = self.pool.begin().await?;
         enforce_kind(&mut tx, session_id, ExerciseKind::Running).await?;
         sqlx::query(
-            "INSERT INTO running_sessions (session_id, distance_m, gpx_data) \
+            "INSERT INTO exercise_running (session_id, distance_m, gpx_data) \
              VALUES ($1, $2, $3)",
         )
         .bind(session_id)
@@ -548,7 +548,7 @@ impl RunningRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<RunningSession, DbError> {
         let row: RunningRow = sqlx::query_as::<_, RunningRow>(
             "SELECT session_id, distance_m, NULL::bytea AS gpx_data \
-             FROM running_sessions WHERE session_id = $1",
+             FROM exercise_running WHERE session_id = $1",
         )
         .bind(session_id)
         .fetch_one(&self.pool)
@@ -562,7 +562,7 @@ impl RunningRepository for SqlxRepository {
 
     async fn get_gpx(&self, session_id: Uuid) -> Result<Option<Vec<u8>>, DbError> {
         let row: Option<(Option<Vec<u8>>,)> =
-            sqlx::query_as("SELECT gpx_data FROM running_sessions WHERE session_id = $1")
+            sqlx::query_as("SELECT gpx_data FROM exercise_running WHERE session_id = $1")
                 .bind(session_id)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -781,7 +781,7 @@ async fn enforce_kind(
     session_id: Uuid,
     expected: ExerciseKind,
 ) -> Result<(), DbError> {
-    let row: Option<(String,)> = sqlx::query_as("SELECT kind FROM exercise_sessions WHERE id = $1")
+    let row: Option<(String,)> = sqlx::query_as("SELECT kind FROM exercises WHERE id = $1")
         .bind(session_id)
         .fetch_optional(&mut **tx)
         .await?;

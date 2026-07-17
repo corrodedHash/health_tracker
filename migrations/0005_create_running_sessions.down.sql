@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS running_sessions;
+DROP TABLE IF EXISTS exercise_running;

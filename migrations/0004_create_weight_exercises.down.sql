@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS weight_exercises;
+DROP TABLE IF EXISTS exercise_weight;

@@ -37,7 +37,7 @@ pub use uuid;
 
 /// Tag for the kind of exercise a session represents.
 ///
-/// Mirrors the `kind` column on `exercise_sessions` and the child-table
+/// Mirrors the `kind` column on `exercises` and the child-table
 /// layout described in `DESIGN.md`. Order matters only for `Default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -87,7 +87,7 @@ pub struct UnknownExerciseKind(pub String);
 // Parent: ExerciseSession
 // ---------------------------------------------------------------------------
 
-/// One row of the `exercise_sessions` parent table — the cross-cutting
+/// One row of the `exercises` parent table — the cross-cutting
 /// representation of any workout, regardless of type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ExerciseSession {
@@ -126,7 +126,7 @@ pub struct NewExerciseSession {
 // Child rows: typed per-kind detail columns
 // ---------------------------------------------------------------------------
 
-/// `weight_exercises` row.
+/// `exercise_weight` row.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] // no Eq: f64 fields
 pub struct WeightSession {
     pub session_id: Uuid,
@@ -137,7 +137,7 @@ pub struct WeightSession {
     pub quality: Option<i32>,
 }
 
-/// `core_exercises` row.
+/// `exercise_core` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CoreSession {
     pub session_id: Uuid,
@@ -146,7 +146,7 @@ pub struct CoreSession {
     pub quality: Option<i32>,
 }
 
-/// `running_sessions` row. `gpx_data` is the raw bytes of the GPX file
+/// `exercise_running` row. `gpx_data` is the raw bytes of the GPX file
 /// (stored as `BYTEA` per `DESIGN.md`). No `Eq` because `distance_m` is f64.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunningSession {
@@ -302,7 +302,7 @@ impl WeightSession {
 }
 
 impl CoreSession {
-    /// `core_exercises` only has a `quality` column to check beyond the
+    /// `exercise_core` only has a `quality` column to check beyond the
     /// duration already validated on the parent.
     ///
     /// # Errors
