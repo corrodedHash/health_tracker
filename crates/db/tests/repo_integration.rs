@@ -89,10 +89,9 @@ async fn sessions_list_filters_by_kind_and_range(pool: PgPool) {
         .with_timezone(&Utc);
     let run = SessionsRepository::insert(&r, uid, &run).await.unwrap();
 
-    let weight_only =
-        SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
-            .await
-            .unwrap();
+    let weight_only = SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
+        .await
+        .unwrap();
     assert_eq!(weight_only.len(), 1);
     assert_eq!(weight_only[0].id, w.id);
 
@@ -113,10 +112,9 @@ async fn sessions_list_filters_by_kind_and_range(pool: PgPool) {
         .unwrap();
     assert_eq!(early.len(), 2);
 
-    let range =
-        SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
-            .await
-            .unwrap();
+    let range = SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
+        .await
+        .unwrap();
     assert!(range.is_empty());
     let _ = (c, run);
 }
@@ -373,8 +371,9 @@ async fn api_token_issue_verify_revoke_list(pool: PgPool) {
     let r = repo(pool);
     let uid = make_user(&r).await;
 
-    let tok: NewApiToken =
-        ApiTokenRepository::issue(&r, uid, "matrix-bot").await.unwrap();
+    let tok: NewApiToken = ApiTokenRepository::issue(&r, uid, "matrix-bot")
+        .await
+        .unwrap();
     assert_eq!(tok.user_id, uid);
     assert_eq!(tok.label, "matrix-bot");
     assert_eq!(tok.token.len(), 64);
