@@ -21,6 +21,15 @@ local all_steps = new Mapping<String, Step> {
     workspace_indicator = "Cargo.toml"
     check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet"
   }
+  ["frontend-lint"] {
+    glob = "frontend/src/**/*.{ts,tsx}"
+    check = "pnpm --dir frontend lint"
+    fix = "pnpm --dir frontend exec eslint . --fix"
+  }
+  ["frontend-typecheck"] {
+    glob = "frontend/src/**/*.{ts,tsx}"
+    check = "pnpm --dir frontend exec tsc -b"
+  }
 }
 
 hooks {
@@ -40,6 +49,11 @@ hooks {
         env {
           ["CARGO_TERM_PROGRESS_WHEN"] = "never"
         }
+      }
+      ["frontend-lint"] {
+        glob = "frontend/src/**/*.{ts,tsx}"
+        check = "pnpm --dir frontend lint"
+        fix = "pnpm --dir frontend exec eslint . --fix"
       }
     }
   }
