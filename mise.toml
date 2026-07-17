@@ -50,10 +50,27 @@ fi
 """
 
 [tasks.sqlx-prepare]
-description = "Regenerate the sqlx offline query cache (requires a running Postgres)"
+description = "Regenerate the sqlx offline query cache using a per-branch database to avoid worktree conflicts"
 depends = ["ensure-debug-database"]
-env = { DATABASE_URL = "postgres://health:health@localhost:5432/health" }
-run = "cargo sqlx prepare --workspace"
+run = """
+set -euo pipefail
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$BRANCH" = "HEAD" ]; then
+  BRANCH="detached-$(git rev-parse --short HEAD)"
+fi
+BRANCH_SLUG="$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g; s/^-//; s/-$//')"
+BRANCH_HASH="$(echo "$BRANCH" | md5sum | head -c 8)"
+DB_NAME="ht_prepare_${BRANCH_SLUG}_${BRANCH_HASH}"
+
+export DATABASE_URL="postgres://health:health@localhost:5432/${DB_NAME}"
+
+# Fresh database so each branch always has a clean isolated schema
+cargo sqlx database reset -y
+
+# Regenerate the offline query cache against this branch's schema
+cargo sqlx prepare --workspace
+"""
 
 [tasks.run-web]
 description = "Run the web server (pass args after --)"

@@ -21,40 +21,36 @@ export interface NewExerciseSession {
 
 export interface WeightSession {
   session_id: string;
-  exercise_name: string;
   weight_kg: number;
   sets: number;
-  reps: number;
   quality: number | null;
 }
 
 export interface CoreSession {
   session_id: string;
-  exercise_name: string;
-  duration_secs: number;
   quality: number | null;
 }
 
 export interface RunningSummary {
   sessionId: string;
   distanceM: number;
+  quality: number | null;
+  movingDistanceM: number | null;
+  movingTime: number | null;
   hasGpx: boolean;
 }
 
 export interface WeightCreate {
-  exercise_name: string;
-  weight_kg: number;
-  sets: number;
-  reps: number;
+  weight_kg?: number;
+  sets?: number;
   quality: number | null;
 }
 
 export interface CoreCreate {
-  exercise_name: string;
-  duration_secs: number;
   quality: number | null;
 }
 
 export interface RunningCreate {
   distance_m: number;
+  quality: number | null;
 }

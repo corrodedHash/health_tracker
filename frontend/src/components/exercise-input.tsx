@@ -22,10 +22,8 @@ export function ExerciseInput() {
   const [quality, setQuality] = useState("");
   const [notes, setNotes] = useState("");
 
-  const [exerciseName, setExerciseName] = useState("");
-  const [weightKg, setWeightKg] = useState("");
-  const [sets, setSets] = useState("");
-  const [reps, setReps] = useState("");
+  const [weightKg, setWeightKg] = useState("12");
+  const [sets, setSets] = useState("3");
   const [distanceM, setDistanceM] = useState("");
 
   const startOidcResume = (formData: URLSearchParams) => {
@@ -47,21 +45,18 @@ export function ExerciseInput() {
 
       if (kind === "weight") {
         await createWeightDetails(session.id, {
-          exercise_name: exerciseName.trim(),
-          weight_kg: Number(weightKg),
-          sets: Number(sets),
-          reps: Number(reps),
-          quality: null,
+          weight_kg: Number(weightKg) || 12,
+          sets: Number(sets) || 3,
+          quality: quality.trim() ? Number(quality) : null,
         });
       } else if (kind === "core") {
         await createCoreDetails(session.id, {
-          exercise_name: exerciseName.trim(),
-          duration_secs: durationMs / 1000,
-          quality: null,
+          quality: quality.trim() ? Number(quality) : null,
         });
       } else if (kind === "running") {
         await createRunningDetails(session.id, {
           distance_m: Number(distanceM),
+          quality: quality.trim() ? Number(quality) : null,
         });
       }
 
@@ -172,21 +167,8 @@ export function ExerciseInput() {
             <CardTitle className="capitalize">{kind} details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(kind === "weight" || kind === "core") && (
-              <div className="space-y-2">
-                <Label htmlFor="exercise_name">Exercise name</Label>
-                <Input
-                  id="exercise_name"
-                  type="text"
-                  value={exerciseName}
-                  placeholder="e.g. bench press"
-                  onChange={(e) => setExerciseName(e.target.value)}
-                />
-              </div>
-            )}
-
             {kind === "weight" && (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="weight_kg">Weight (kg)</Label>
                   <Input
@@ -206,16 +188,6 @@ export function ExerciseInput() {
                     min="1"
                     value={sets}
                     onChange={(e) => setSets(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reps">Reps</Label>
-                  <Input
-                    id="reps"
-                    type="number"
-                    min="1"
-                    value={reps}
-                    onChange={(e) => setReps(e.target.value)}
                   />
                 </div>
               </div>

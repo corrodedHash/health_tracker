@@ -135,23 +135,24 @@ pub struct NewExerciseSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] // no Eq: f64 fields
 pub struct WeightSession {
     pub session_id: Uuid,
-    pub exercise_name: String,
+    #[serde(default = "default_weight_kg")]
     pub weight_kg: f64,
+    #[serde(default = "default_sets")]
     pub sets: i32,
-    pub reps: i32,
     pub quality: Option<i32>,
+}
+
+const fn default_weight_kg() -> f64 {
+    12.0
+}
+const fn default_sets() -> i32 {
+    3
 }
 
 /// `exercise_core` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CoreSession {
     pub session_id: Uuid,
-    pub exercise_name: String,
-    #[serde(
-        rename = "duration_secs",
-        with = "crate::duration_ext::serde_duration_secs"
-    )]
-    pub duration: std::time::Duration,
     pub quality: Option<i32>,
 }
 
@@ -161,6 +162,11 @@ pub struct CoreSession {
 pub struct RunningSession {
     pub session_id: Uuid,
     pub distance_m: f64,
+    pub quality: Option<i32>,
+    /// Moving distance computed from GPX (intervals where speed > threshold).
+    pub moving_distance_m: Option<f64>,
+    /// Moving time in seconds, computed from GPX.
+    pub moving_time: Option<f64>,
     /// Raw GPX blob — present only when the upload came via the bot or an
     /// explicit GPX upload through the API. `serde(skip)` for the API list
     /// view; clients that need the bytes hit `GET /api/runs/:id/gpx`.
@@ -261,8 +267,6 @@ pub enum ValidationError {
     NonPositiveWeight(f64),
     #[error("sets must be positive (got {0})")]
     NonPositiveSets(i32),
-    #[error("reps must be positive (got {0})")]
-    NonPositiveReps(i32),
     #[error("bpm must be in 30..=220 (got {0})")]
     BpmOutOfRange(i16),
     #[error("offset_secs must be non-negative (got {0})")]
@@ -303,9 +307,6 @@ impl WeightSession {
         if self.sets <= 0 {
             return Err(ValidationError::NonPositiveSets(self.sets));
         }
-        if self.reps <= 0 {
-            return Err(ValidationError::NonPositiveReps(self.reps));
-        }
         if let Some(q) = self.quality
             && !(1..=10).contains(&q)
         {
@@ -340,6 +341,11 @@ impl RunningSession {
     pub fn validate(&self) -> Result<(), ValidationError> {
         if self.distance_m < 0.0 {
             return Err(ValidationError::NegativeDistance(self.distance_m));
+        }
+        if let Some(q) = self.quality
+            && !(1..=10).contains(&q)
+        {
+            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
@@ -420,10 +426,8 @@ mod tests {
     fn weight_validation_catches_negatives() {
         let bad = WeightSession {
             session_id: Uuid::nil(),
-            exercise_name: "bench".into(),
             weight_kg: -5.0,
             sets: 3,
-            reps: 5,
             quality: None,
         };
         assert_eq!(
@@ -436,10 +440,8 @@ mod tests {
     fn weight_quality_out_of_range() {
         let bad = WeightSession {
             session_id: Uuid::nil(),
-            exercise_name: "bench".into(),
             weight_kg: 60.0,
             sets: 3,
-            reps: 5,
             quality: Some(11),
         };
         assert_eq!(bad.validate(), Err(ValidationError::QualityOutOfRange(11)));

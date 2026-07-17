@@ -86,12 +86,18 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_gpx<A: ApiClient>(api: &A, bytes: &[u8]) -> anyhow::Result<()> {
     let result = process_gpx(bytes)?;
     let id = api
-        .post_run_gpx(bytes, result.started_at, result.distance_m, result.duration)
+        .post_run_gpx(
+            bytes,
+            result.started_at,
+            result.total_distance_m,
+            result.total_duration,
+        )
         .await?;
     tracing::info!(
-        "Uploaded run: {}m in {:.1}s on {} -> session {id}",
-        result.distance_m,
-        result.duration.as_secs_f64(),
+        "Uploaded run: total {}m / moving {}m in {:.1}s on {} -> session {id}",
+        result.total_distance_m,
+        result.moving_distance_m,
+        result.total_duration.as_secs_f64(),
         result.started_at
     );
     Ok(())

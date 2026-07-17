@@ -48,11 +48,16 @@ pub fn get_track_moving_distance_time(t: &Track, kmh_threshold: f64) -> (f64, ti
 
 pub struct GpxResult {
     pub started_at: chrono::DateTime<chrono::Utc>,
-    pub distance_m: f64,
-    pub duration: StdDuration,
+    pub total_distance_m: f64,
+    pub total_duration: StdDuration,
+    pub moving_distance_m: f64,
+    pub moving_duration: StdDuration,
 }
 
-/// Parse GPX bytes and compute the run's moving distance + duration.
+/// Parse GPX bytes and compute the run's total and moving distance + duration.
+///
+/// Moving values are computed with a speed threshold of 1.5 km/h (walking
+/// speed), filtering out stationary segments.
 ///
 /// # Errors
 /// Returns an error if the bytes cannot be parsed as GPX, the file
@@ -64,7 +69,12 @@ pub fn process_gpx(bytes: &[u8]) -> anyhow::Result<GpxResult> {
         .tracks
         .first()
         .ok_or_else(|| anyhow::anyhow!("GPX file contains no tracks"))?;
-    let (distance, duration) = get_track_moving_distance_time(t, 1.5);
+
+    // Moving: filter by speed threshold.
+    let (moving_distance, moving_duration_time) = get_track_moving_distance_time(t, 1.5);
+
+    // Total: include all points (threshold 0).
+    let (total_distance, total_duration_time) = get_track_moving_distance_time(t, 0.0);
 
     let started_time = gpx
         .metadata
@@ -75,8 +85,10 @@ pub fn process_gpx(bytes: &[u8]) -> anyhow::Result<GpxResult> {
 
     Ok(GpxResult {
         started_at,
-        distance_m: distance,
-        duration: duration_ext::from_time(duration),
+        total_distance_m: total_distance,
+        total_duration: duration_ext::from_time(total_duration_time),
+        moving_distance_m: moving_distance,
+        moving_duration: duration_ext::from_time(moving_duration_time),
     })
 }
 
