@@ -7,6 +7,12 @@
 # Used by the `changelog` task and mirrored by the release workflow.
 git-cliff = { version = "2.13.1", repository = "https://github.com/orhun/git-cliff" }
 pnpm = "11"
+# Git hook manager — runs repo-integrity checks and linters.
+hk = "1"
+
+[env]
+# Tight mise integration: wraps hk hooks with `mise x` so tools are in PATH.
+HK_MISE = "1"
 
 [tasks.build]
 description = "Build the debug binaries (health-web, health-bot)"
@@ -56,22 +62,6 @@ run = "cargo run -p health-bot --"
 [tasks.test]
 description = "Run the test suite"
 run = "cargo test --all-features"
-
-[tasks.fmt]
-description = "Format the code"
-run = "cargo fmt --all"
-
-[tasks.lint]
-description = "Run clippy with warnings as errors"
-run = "cargo clippy --all-targets --all-features -- -D warnings"
-
-[tasks.fmt-check]
-description = "Verify formatting without modifying files"
-run = "cargo fmt --all -- --check"
-
-[tasks.check]
-description = "Run everything CI runs: fmt check, clippy, tests"
-depends = ["fmt-check", "lint", "test"]
 
 [tasks.frontend-install]
 description = "Install frontend dependencies"
