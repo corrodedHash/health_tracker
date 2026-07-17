@@ -1,9 +1,12 @@
 pub mod auth;
+pub mod core;
 pub mod heartrate;
 pub mod openapi;
+pub mod running;
 pub mod runs;
 pub mod sessions;
 pub mod tokens;
+pub mod weight;
 
 use axum::Router;
 use axum::routing;
@@ -31,6 +34,18 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/exercise-sessions/{id}/heartrate",
             routing::post(heartrate::add),
+        )
+        .route(
+            "/exercise-sessions/{id}/weight",
+            routing::post(weight::create).get(weight::get),
+        )
+        .route(
+            "/exercise-sessions/{id}/core",
+            routing::post(core::create).get(core::get),
+        )
+        .route(
+            "/exercise-sessions/{id}/running",
+            routing::post(running::create).get(running::get),
         )
         .route("/runs/{id}/gpx", routing::get(runs::get_gpx))
         .route("/tokens", routing::get(tokens::list).post(tokens::issue))

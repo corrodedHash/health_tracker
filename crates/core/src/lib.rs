@@ -142,6 +142,10 @@ pub struct WeightSession {
 pub struct CoreSession {
     pub session_id: Uuid,
     pub exercise_name: String,
+    #[serde(
+        rename = "duration_secs",
+        with = "crate::duration_ext::serde_duration_secs"
+    )]
     pub duration: std::time::Duration,
     pub quality: Option<i32>,
 }
