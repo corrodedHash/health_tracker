@@ -5,8 +5,7 @@ Vite + React frontend and a Matrix bot for GPX ingest. Backed by Postgres
 via SQLx with class-table inheritance for the exercise hierarchy.
 
 See [`DESIGN.md`](DESIGN.md) for the architecture and
-[`MIGRATION.md`](MIGRATION.md) for the bootstrap checkpoint + per-phase
-TODO list.
+[`MIGRATION.md`](MIGRATION.md) for the bootstrap checkpoint.
 
 ## Layout
 
@@ -15,8 +14,8 @@ health_tracker/
 ├── crates/
 │   ├── core   # domain types — zero I/O
 │   ├── db     # SQLx repository + migrations
-│   ├── auth   # OIDC PKCE flow (TODO: Agent A)
-│   ├── web    # axum server, binary 1  (TODO: Agent A)
+│   ├── auth   # OIDC PKCE flow
+│   ├── web    # axum server, binary 1
 │   └── bot    # matrix-sdk bot, binary 2
 ├── frontend/             # Vite + React + TS + shadcn/ui + echarts
 ├── migrations/           # SQLx migrations (Postgres-only)
@@ -36,7 +35,8 @@ health_tracker/
 - Docker — unit tests for `crates/db` run against a Postgres testcontainer
   via `#[sqlx::test]`. SQLite is intentionally not supported; see
   `MIGRATION.md` §"Test strategy decision".
-- Node 20+ and npm for the frontend.
+- Node 20+ and pnpm for the frontend (the repo pins `pnpm` via `mise` and
+  `package.json`'s `packageManager` field).
 
 ### Build
 
@@ -53,14 +53,17 @@ cargo test --workspace
 
 ```sh
 cd frontend
-npm install
-npm run dev    # Vite dev server, proxies /api -> http://localhost:3000
-npm run build  # type-check + production build into frontend/dist
+pnpm install
+pnpm dev       # Vite dev server, proxies /api -> http://localhost:3000
+pnpm build     # type-check + production build into frontend/dist
 ```
 
 In production the axum server (`crates/web`) serves `frontend/dist` as
 static files with an SPA fallback; the dev server proxies `/api` to
 `localhost:3000`.
+
+All frontend commands are also available as `mise` tasks:
+`mise run frontend-{install,dev,build,lint}`.
 
 ### Bot
 
@@ -108,14 +111,21 @@ queries at test time.
 
 `mise` tasks are wired up (see `mise.toml`):
 
-| Task            | Description                              |
-|-----------------|------------------------------------------|
-| `mise run build`     | Build debug binaries                |
-| `mise run test`      | `cargo test --all-features`         |
-| `mise run lint`      | `cargo clippy --all-targets -- -D warnings` |
-| `mise run fmt-check` | Verify formatting                     |
-| `mise run check`     | Run `fmt-check`, `lint`, `test`      |
-| `mise run run-web`   | Run the web server                   |
-| `mise run run-bot`   | Run the bot                          |
-| `mise run changelog` | Preview the next release notes       |
-| `mise run tag`       | Bump version, tag, push to release   |
+| Task                                | Description                              |
+|-------------------------------------|------------------------------------------|
+| `mise run build`                    | Build debug binaries                     |
+| `mise run test`                     | `cargo test --all-features`              |
+| `mise run lint`                     | `cargo clippy --all-targets -- -D warnings` |
+| `mise run fmt-check`                | Verify formatting                        |
+| `mise run check`                    | Run `fmt-check`, `lint`, `test`          |
+| `mise run run-web`                  | Run the web server                       |
+| `mise run run-bot`                  | Run the bot                              |
+| `mise run frontend-install`         | Install frontend dependencies            |
+| `mise run frontend-dev`             | Start the frontend dev server            |
+| `mise run frontend-build`           | Build the frontend for production        |
+| `mise run frontend-lint`            | Lint the frontend                        |
+| `mise run db-up`                    | Start a local Postgres container         |
+| `mise run db-down`                  | Stop the Postgres container              |
+| `mise run sqlx-prepare`             | Regenerate the sqlx offline cache        |
+| `mise run changelog`                | Preview the next release notes           |
+| `mise run tag`                      | Bump version, tag, push to release       |
