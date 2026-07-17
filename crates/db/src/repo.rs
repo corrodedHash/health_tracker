@@ -479,18 +479,24 @@ impl SessionsRepository for SqlxRepository {
     ) -> Result<Vec<ExerciseSession>, DbError> {
         let rows: Vec<SessionRow> = match (kind, from, to) {
             (None, None, None) => self.list_all(user_id, limit, offset).await?,
-            (Some(k), None, None) => self.list_by_kind(user_id, k.as_str(), limit, offset).await?,
+            (Some(k), None, None) => {
+                self.list_by_kind(user_id, k.as_str(), limit, offset)
+                    .await?
+            }
             (None, Some(f), None) => self.list_from(user_id, f, limit, offset).await?,
             (None, None, Some(t)) => self.list_to(user_id, t, limit, offset).await?,
             (Some(k), Some(f), None) => {
-                self.list_by_kind_from(user_id, k.as_str(), f, limit, offset).await?
+                self.list_by_kind_from(user_id, k.as_str(), f, limit, offset)
+                    .await?
             }
             (Some(k), None, Some(t)) => {
-                self.list_by_kind_to(user_id, k.as_str(), t, limit, offset).await?
+                self.list_by_kind_to(user_id, k.as_str(), t, limit, offset)
+                    .await?
             }
             (None, Some(f), Some(t)) => self.list_between(user_id, f, t, limit, offset).await?,
             (Some(k), Some(f), Some(t)) => {
-                self.list_by_kind_between(user_id, k.as_str(), f, t, limit, offset).await?
+                self.list_by_kind_between(user_id, k.as_str(), f, t, limit, offset)
+                    .await?
             }
         };
         rows.into_iter().map(TryFrom::try_from).collect()

@@ -41,7 +41,14 @@ pub async fn list(
 
     let repo = SqlxRepository::new(state.pool.clone());
     let sessions = repo
-        .list(user_id, kind, params.from, params.to, params.limit, params.offset)
+        .list(
+            user_id,
+            kind,
+            params.from,
+            params.to,
+            params.limit,
+            params.offset,
+        )
         .await?;
     Ok(Json(sessions))
 }
