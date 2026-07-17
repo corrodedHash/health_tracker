@@ -1,5 +1,13 @@
 # Agent rules
 
+## Package manager
+
+- The frontend uses **pnpm** (not npm). The version is pinned via `package.json`'s
+  `packageManager` field and `mise.toml`. Always use `pnpm` for frontend commands.
+- Most common tasks are available as `mise run <task>` — see `mise.toml` or
+  `mise tasks` for the full list. Prefer `mise run` over raw commands when
+  applicable.
+
 ## Migrations
 
 - **Never modify an existing migration** once it has been committed to `main`.
@@ -20,3 +28,8 @@ Workflow after any schema change:
 3. Commit the updated `sqlx-data.json` alongside the new migration.
 4. From that point `query!` macros verify against the cached schema at compile
    time with no live database needed.
+
+## Prefer mise tasks
+
+Run `mise tasks` to see all available tasks. Using `mise run <task>` ensures
+the correct tool versions and environment are set up automatically.
