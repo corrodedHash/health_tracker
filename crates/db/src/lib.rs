@@ -13,11 +13,11 @@
 //!
 //! ## Compile-time query checking
 //!
-//! The current impl uses **runtime** `sqlx::query_as` calls so the
-//! crate compiles with no live `DATABASE_URL` and no `.sqlx/` cache.
-//! Phase 6 item 5.38 runs `cargo sqlx prepare --workspace` to produce
-//! the offline cache; at that point the `query!` macros can be adopted
-//! without changing the private API surface.
+//! All queries use the **compile-time** `query!` / `query_as!` macros.
+//! The offline cache in `sqlx-data.json` (workspace root) is generated
+//! via `cargo sqlx prepare --workspace` against a live Postgres with
+//! all migrations applied, then committed to the repository so every
+//! build is type-safe without a live database.
 
 #![allow(clippy::missing_docs_in_private_items)]
 

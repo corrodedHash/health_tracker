@@ -12,8 +12,8 @@ session.toml
 config/local.toml
 config/*.local.toml
 
-# SQLx offline cache is committed at item 5.38; until then, ignore stray caches
-.sqlx/
+# SQLx offline cache — committed so every build is type-safe without a live DB
+# .sqlx/
 
 # Editor / OS cruft
 .DS_Store
