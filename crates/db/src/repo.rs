@@ -292,7 +292,8 @@ impl SessionsRepository for SqlxRepository {
     ) -> Result<Vec<ExerciseSession>, DbError> {
         let rows: Vec<SessionRow> = match (kind, from, to) {
             (None, None, None) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 \
                      ORDER BY started_at DESC",
@@ -302,72 +303,91 @@ impl SessionsRepository for SqlxRepository {
                 .await?
             }
             (Some(k), None, None) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND kind = $2 \
                      ORDER BY started_at DESC",
-                    user_id, k.as_str()
+                    user_id,
+                    k.as_str()
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (None, Some(f), None) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND started_at >= $2 \
                      ORDER BY started_at DESC",
-                    user_id, f
+                    user_id,
+                    f
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (None, None, Some(t)) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND started_at <= $2 \
                      ORDER BY started_at DESC",
-                    user_id, t
+                    user_id,
+                    t
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (Some(k), Some(f), None) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
                      ORDER BY started_at DESC",
-                    user_id, k.as_str(), f
+                    user_id,
+                    k.as_str(),
+                    f
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (Some(k), None, Some(t)) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
                      ORDER BY started_at DESC",
-                    user_id, k.as_str(), t
+                    user_id,
+                    k.as_str(),
+                    t
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (None, Some(f), Some(t)) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
                      ORDER BY started_at DESC",
-                    user_id, f, t
+                    user_id,
+                    f,
+                    t
                 )
                 .fetch_all(&self.pool)
                 .await?
             }
             (Some(k), Some(f), Some(t)) => {
-                sqlx::query_as!(SessionRow,
+                sqlx::query_as!(
+                    SessionRow,
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                      FROM exercises \
                      WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
                      ORDER BY started_at DESC",
-                    user_id, k.as_str(), f, t
+                    user_id,
+                    k.as_str(),
+                    f,
+                    t
                 )
                 .fetch_all(&self.pool)
                 .await?
@@ -377,7 +397,8 @@ impl SessionsRepository for SqlxRepository {
     }
 
     async fn get(&self, id: Uuid) -> Result<ExerciseSession, DbError> {
-        let row = sqlx::query_as!(SessionRow,
+        let row = sqlx::query_as!(
+            SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE id = $1",
             id
@@ -396,7 +417,8 @@ impl SessionsRepository for SqlxRepository {
         user_id: Uuid,
         new: &NewExerciseSession,
     ) -> Result<ExerciseSession, DbError> {
-        let row = sqlx::query_as!(SessionRow,
+        let row = sqlx::query_as!(
+            SessionRow,
             "INSERT INTO exercises (user_id, kind, started_at, duration, notes) \
              VALUES ($1, $2, $3, $4, $5) \
              RETURNING id, user_id, kind, started_at, duration, notes, created_at",
@@ -448,7 +470,8 @@ impl WeightRepository for SqlxRepository {
     }
 
     async fn get_by_session(&self, session_id: Uuid) -> Result<WeightSession, DbError> {
-        let row = sqlx::query_as!(WeightRow,
+        let row = sqlx::query_as!(
+            WeightRow,
             "SELECT session_id, exercise_name, weight_kg, sets, reps, quality \
              FROM exercise_weight WHERE session_id = $1",
             session_id
@@ -489,7 +512,8 @@ impl CoreRepository for SqlxRepository {
     }
 
     async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError> {
-        let row = sqlx::query_as!(CoreRow,
+        let row = sqlx::query_as!(
+            CoreRow,
             "SELECT session_id, exercise_name, duration, quality \
              FROM exercise_core WHERE session_id = $1",
             session_id
@@ -528,7 +552,8 @@ impl RunningRepository for SqlxRepository {
     }
 
     async fn get_by_session(&self, session_id: Uuid) -> Result<RunningSession, DbError> {
-        let row = sqlx::query_as!(RunningRow,
+        let row = sqlx::query_as!(
+            RunningRow,
             "SELECT session_id, distance_m, NULL::bytea AS gpx_data \
              FROM exercise_running WHERE session_id = $1",
             session_id
@@ -586,7 +611,8 @@ impl HeartrateRepository for SqlxRepository {
     }
 
     async fn list_for_session(&self, session_id: Uuid) -> Result<Vec<HeartrateSample>, DbError> {
-        let rows = sqlx::query_as!(HeartrateRow,
+        let rows = sqlx::query_as!(
+            HeartrateRow,
             "SELECT session_id, offset_secs, bpm FROM heartrate_samples \
              WHERE session_id = $1 ORDER BY offset_secs ASC",
             session_id
@@ -608,7 +634,8 @@ impl UsersRepository for SqlxRepository {
         external_id: &str,
         display_name: Option<&str>,
     ) -> Result<User, DbError> {
-        let row = sqlx::query_as!(UserRow,
+        let row = sqlx::query_as!(
+            UserRow,
             "INSERT INTO users (external_id, display_name) VALUES ($1, $2) \
              ON CONFLICT (external_id) DO UPDATE \
                  SET display_name = EXCLUDED.display_name \
@@ -623,7 +650,8 @@ impl UsersRepository for SqlxRepository {
     }
 
     async fn get(&self, id: Uuid) -> Result<User, DbError> {
-        let row = sqlx::query_as!(UserRow,
+        let row = sqlx::query_as!(
+            UserRow,
             "SELECT id, external_id, display_name, created_at FROM users WHERE id = $1",
             id
         )
@@ -659,7 +687,8 @@ impl OidcStateRepository for SqlxRepository {
     }
 
     async fn fetch(&self, csrf: &str) -> Result<OidcState, DbError> {
-        let row = sqlx::query_as!(OidcStateRow,
+        let row = sqlx::query_as!(
+            OidcStateRow,
             "SELECT csrf, code_verifier, nonce, resume_token, created_at \
              FROM oidc_state WHERE csrf = $1",
             csrf
@@ -693,7 +722,8 @@ impl ApiTokenRepository for SqlxRepository {
         let cleartext = hex::encode(bytes);
         let hash = sha256_hex(&cleartext);
 
-        let row = sqlx::query_as!(ApiTokenRow,
+        let row = sqlx::query_as!(
+            ApiTokenRow,
             "INSERT INTO api_tokens (user_id, label, token_hash) \
              VALUES ($1, $2, $3) \
              RETURNING id, user_id, label, token_hash, created_at, last_used_at",
@@ -743,7 +773,8 @@ impl ApiTokenRepository for SqlxRepository {
     }
 
     async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<ApiToken>, DbError> {
-        let rows = sqlx::query_as!(ApiTokenRow,
+        let rows = sqlx::query_as!(
+            ApiTokenRow,
             "SELECT id, user_id, label, token_hash, created_at, last_used_at \
              FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC",
             user_id
