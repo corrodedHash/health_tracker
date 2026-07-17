@@ -1,0 +1,46 @@
+amends "package://github.com/jdx/hk/releases/download/v1.51.0/hk@1.51.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.51.0/hk@1.51.0#/Builtins.pkl"
+
+local all_steps = new Mapping<String, Step> {
+  ["check-migrations"] {
+    check = "./tools/checks/check-migrations.sh"
+  }
+  ["cargo-fmt"] = Builtins.cargo_fmt
+  ["cargo-clippy"] {
+    glob = "**/*.rs"
+    workspace_indicator = "Cargo.toml"
+    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
+    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+    check_first = false
+    env {
+      ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+    }
+  }
+  ["cargo-test"] {
+    glob = "**/*.rs"
+    workspace_indicator = "Cargo.toml"
+    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet"
+  }
+}
+
+hooks {
+  ["check"] {
+    steps = all_steps
+  }
+  ["fix"] {
+    fix = true
+    steps = new Mapping<String, Step> {
+      ["cargo-fmt"] = Builtins.cargo_fmt
+      ["cargo-clippy"] {
+        glob = "**/*.rs"
+        workspace_indicator = "Cargo.toml"
+        check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
+        fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+        check_first = false
+        env {
+          ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+        }
+      }
+    }
+  }
+}
