@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO exercise_running (session_id, distance_m, gpx_data) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e4cf10c2f671e7f64e1b37d8426806e65177e4cac08f3299dd311e5d2e7489e"
+}

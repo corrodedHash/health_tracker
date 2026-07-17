@@ -12,8 +12,26 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
 
 jobs:
+  migrations-immutable:
+    name: Check migrations are not modified
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check old migrations are not modified
+        run: |
+          MODIFIED=$(git diff --diff-filter=M --name-only "origin/${{ github.base_ref }}"...HEAD -- migrations/)
+          if [ -n "$MODIFIED" ]; then
+            echo "::error::Existing migration files must not be modified. Add a new numbered migration instead."
+            echo "$MODIFIED"
+            exit 1
+          fi
+
   check:
     name: fmt / clippy / test
     runs-on: ubuntu-latest

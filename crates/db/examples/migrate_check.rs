@@ -18,6 +18,7 @@ async fn main() {
 
     health_db::run_migrations(&pool).await.unwrap();
 
+    // These query system/catalog tables not in our schema, so runtime is fine.
     let rows: Vec<(i64,)> = sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version")
         .fetch_all(&pool)
         .await

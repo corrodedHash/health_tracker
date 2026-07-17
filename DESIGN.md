@@ -45,7 +45,7 @@ Key rules:
 
 ### Class Table Inheritance
 
-A parent `exercise_sessions` table holds cross-cutting fields. Each exercise type
+A parent `exercises` table holds cross-cutting fields. Each exercise type
 gets its own child table whose PK is also a FK (with `ON DELETE CASCADE`) back to
 the parent. This gives real column types and constraints while keeping a single FK
 target for heartrate data.
@@ -78,7 +78,7 @@ CREATE TABLE oidc_state (
 -- 0003_create_exercise_sessions — parent CTI table. Adds an explicit
 -- FK to users(id) and a CHECK on the kind discriminator mirroring
 -- health_core::ExerciseKind.
-CREATE TABLE exercise_sessions (
+CREATE TABLE exercises (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID NOT NULL REFERENCES users(id),
     kind        TEXT NOT NULL CHECK (kind IN ('weight','core','running')),
@@ -87,14 +87,14 @@ CREATE TABLE exercise_sessions (
     notes       TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX exercise_sessions_user_started_at_idx
-    ON exercise_sessions (user_id, started_at DESC);
-CREATE INDEX exercise_sessions_user_kind_started_at_idx
-    ON exercise_sessions (user_id, kind, started_at DESC);
+CREATE INDEX exercises_user_started_at_idx
+    ON exercises (user_id, started_at DESC);
+CREATE INDEX exercises_user_kind_started_at_idx
+    ON exercises (user_id, kind, started_at DESC);
 
 -- 0004_create_weight_exercises — child PK+FK with ON DELETE CASCADE.
-CREATE TABLE weight_exercises (
-    session_id    UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+CREATE TABLE exercise_weight (
+    session_id    UUID PRIMARY KEY REFERENCES exercises(id) ON DELETE CASCADE,
     exercise_name TEXT NOT NULL,
     weight_kg     DOUBLE PRECISION NOT NULL,
     sets          INT NOT NULL,
@@ -103,15 +103,15 @@ CREATE TABLE weight_exercises (
 );
 
 -- 0005_create_running_sessions — GPX blob stored inline as BYTEA.
-CREATE TABLE running_sessions (
-    session_id   UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+CREATE TABLE exercise_running (
+    session_id   UUID PRIMARY KEY REFERENCES exercises(id) ON DELETE CASCADE,
     distance_m   DOUBLE PRECISION NOT NULL,
     gpx_data     BYTEA              -- raw GPX file, stored as blob
 );
 
 -- 0006_create_core_exercises — child PK+FK with ON DELETE CASCADE.
-CREATE TABLE core_exercises (
-    session_id    UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+CREATE TABLE exercise_core (
+    session_id    UUID PRIMARY KEY REFERENCES exercises(id) ON DELETE CASCADE,
     exercise_name TEXT NOT NULL,
     duration      INTERVAL NOT NULL,
     quality       INT
@@ -119,7 +119,7 @@ CREATE TABLE core_exercises (
 
 -- 0007_create_heartrate_samples — time-series, composite PK, any kind.
 CREATE TABLE heartrate_samples (
-    session_id   UUID NOT NULL REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+    session_id   UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
     offset_secs  INTEGER NOT NULL,   -- seconds from session start
     bpm          SMALLINT NOT NULL,
     PRIMARY KEY (session_id, offset_secs),
@@ -159,7 +159,7 @@ CREATE INDEX api_tokens_user_id_idx ON api_tokens (user_id);
 ### Unknown / Custom Exercises
 
 If an exercise type doesn't have a child table yet, insert only into
-`exercise_sessions` with a descriptive `kind` value and put details in `notes`.
+`exercises` with a descriptive `kind` value and put details in `notes`.
 Later, when the type gets its own table, rows can be migrated or simply left as-
 is. The parent row always exists as a fallback.
 
@@ -235,7 +235,7 @@ Or use a feature flag.
 
 ### Adding a new exercise type
 
-1. Add a migration creating a new child table (FK → `exercise_sessions`).
+1. Add a migration creating a new child table (FK → `exercises`).
 2. Add a variant to the `ExerciseKind` enum in `core`.
 3. Add a repository method in `db` for the new type.
 4. Done — heartrate, auth, and cross-cutting queries work without changes.
@@ -412,7 +412,7 @@ These pin down selections left open in §6 of `MIGRATION.md`:
   installs work on mobile. Small cost, useful offline UX.
 - **Frontend GPX rendering deferred.** The server still parses GPX
   server-side on `POST /api/runs/gpx`, extracts distance + duration at
-  ingest time, and stores the raw bytes in `running_sessions.gpx_data`
+  ingest time, and stores the raw bytes in `exercise_running.gpx_data`
   plus exposes `GET /api/runs/:id/gpx`. The frontend, however, does
   **not** render a map in the first cut — it shows only the numeric
   distance and pace. Map selection (leaflet vs maplibre-gl) is deferred

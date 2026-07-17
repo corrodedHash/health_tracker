@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO heartrate_samples (session_id, offset_secs, bpm) VALUES ($1, $2, $3) ON CONFLICT (session_id, offset_secs) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6450406d81e1cc4cf857c891c15bec3b641aee92f7074654f051518ab1b354f6"
+}

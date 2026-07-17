@@ -1,9 +1,9 @@
--- weight_exercises: child table of the CTI layout for 'weight' sessions.
--- PK is also FK to exercise_sessions(id) with ON DELETE CASCADE so the
+-- exercise_weight: child table of the CTI layout for 'weight' sessions.
+-- PK is also FK to exercises(id) with ON DELETE CASCADE so the
 -- parent row's lifetime governs the child's. Per DESIGN.md §"Class
 -- Table Inheritance". Mirrors health_core::WeightSession.
-CREATE TABLE weight_exercises (
-    session_id    UUID PRIMARY KEY REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+CREATE TABLE exercise_weight (
+    session_id    UUID PRIMARY KEY REFERENCES exercises(id) ON DELETE CASCADE,
     exercise_name TEXT NOT NULL,
     weight_kg     DOUBLE PRECISION NOT NULL,
     sets          INT NOT NULL,
@@ -11,15 +11,15 @@ CREATE TABLE weight_exercises (
     quality       INT
 );
 
-COMMENT ON TABLE weight_exercises IS 'Child rows for exercise_sessions of kind ''weight''';
-COMMENT ON COLUMN weight_exercises.session_id IS 'FK to exercise_sessions.id (also the PK)';
-COMMENT ON COLUMN weight_exercises.exercise_name IS 'E.g. ''bench press'', ''squat''';
-COMMENT ON COLUMN weight_exercises.weight_kg IS 'Per-set weight in kilograms (must be > 0; enforced by health_core validation)';
-COMMENT ON COLUMN weight_exercises.sets IS 'Number of sets performed (positive)';
-COMMENT ON COLUMN weight_exercises.reps IS 'Reps per set (positive)';
-COMMENT ON COLUMN weight_exercises.quality IS 'Optional 1-10 subjective feel rating';
+COMMENT ON TABLE exercise_weight IS 'Child rows for exercises of kind ''weight''';
+COMMENT ON COLUMN exercise_weight.session_id IS 'FK to exercises.id (also the PK)';
+COMMENT ON COLUMN exercise_weight.exercise_name IS 'E.g. ''bench press'', ''squat''';
+COMMENT ON COLUMN exercise_weight.weight_kg IS 'Per-set weight in kilograms (must be > 0; enforced by health_core validation)';
+COMMENT ON COLUMN exercise_weight.sets IS 'Number of sets performed (positive)';
+COMMENT ON COLUMN exercise_weight.reps IS 'Reps per set (positive)';
+COMMENT ON COLUMN exercise_weight.quality IS 'Optional 1-10 subjective feel rating';
 
--- Note: cross-table enforcement that exercise_sessions.kind = 'weight'
+-- Note: cross-table enforcement that exercises.kind = 'weight'
 -- is not done with a CHECK constraint (Postgres CHECK cannot contain
 -- subqueries). The SqlxRepository insert path (Phase 1 item 5.9) inserts
 -- the parent and child row in a single transaction and refuses to insert
