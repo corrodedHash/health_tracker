@@ -14,7 +14,7 @@ pub struct Config {
     pub cookie_secure: bool,
 }
 
-fn default_cookie_secure() -> bool {
+const fn default_cookie_secure() -> bool {
     true
 }
 
