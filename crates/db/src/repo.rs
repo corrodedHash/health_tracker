@@ -291,18 +291,20 @@ impl SessionsRepository for SqlxRepository {
         kind: Option<ExerciseKind>,
         from: Option<chrono::DateTime<chrono::Utc>>,
         to: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<ExerciseSession>, DbError> {
-        // Build the query dynamically. Four optional predicates; we
-        // branch on the four combos to keep the bind order correct
-        // rather than emit a string-frog of optional clauses.
         let rows: Vec<SessionRow> = match (kind, from, to) {
             (None, None, None) => {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $2 OFFSET $3",
                 )
                 .bind(user_id)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -310,10 +312,13 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $3 OFFSET $4",
                 )
                 .bind(user_id)
                 .bind(k.as_str())
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -321,10 +326,13 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at >= $2 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $3 OFFSET $4",
                 )
                 .bind(user_id)
                 .bind(f)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -332,10 +340,13 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at <= $2 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $3 OFFSET $4",
                 )
                 .bind(user_id)
                 .bind(t)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -343,11 +354,14 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $4 OFFSET $5",
                 )
                 .bind(user_id)
                 .bind(k.as_str())
                 .bind(f)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -355,11 +369,14 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $4 OFFSET $5",
                 )
                 .bind(user_id)
                 .bind(k.as_str())
                 .bind(t)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -367,11 +384,14 @@ impl SessionsRepository for SqlxRepository {
                 sqlx::query_as::<_, SessionRow>(
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $4 OFFSET $5",
                 )
                 .bind(user_id)
                 .bind(f)
                 .bind(t)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -380,12 +400,15 @@ impl SessionsRepository for SqlxRepository {
                     "SELECT id, user_id, kind, started_at, duration, notes, created_at \
                  FROM exercise_sessions \
                  WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
-                 ORDER BY started_at DESC",
+                 ORDER BY started_at DESC \
+                 LIMIT $5 OFFSET $6",
                 )
                 .bind(user_id)
                 .bind(k.as_str())
                 .bind(f)
                 .bind(t)
+                .bind(limit)
+                .bind(offset)
                 .fetch_all(&self.pool)
                 .await?
             }
