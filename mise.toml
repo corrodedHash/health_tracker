@@ -16,8 +16,36 @@ run = "cargo build"
 description = "Build the optimized release binaries"
 run = "cargo build --release"
 
+[tasks.ensure-debug-database]
+description = "Start a --rm PostgreSQL if one isn't already running on localhost:5432"
+run = """
+if ! command -v pg_isready &>/dev/null; then
+  echo "pg_isready not found — skipping Postgres health check."
+  exit 0
+fi
+if ! pg_isready -h localhost -p 5432 -q 2>/dev/null; then
+  echo "No PostgreSQL found on localhost:5432, starting temporary container..."
+  docker run --rm -d --name ht-postgres-ensure \
+    -e POSTGRES_USER=health \
+    -e POSTGRES_PASSWORD=health \
+    -e POSTGRES_DB=health \
+    -p 5432:5432 postgres:16
+  echo "Waiting for PostgreSQL to be ready..."
+  for i in $(seq 1 30); do
+    if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
+      echo "PostgreSQL is ready."
+      break
+    fi
+    sleep 1
+  done
+else
+  echo "PostgreSQL already running on localhost:5432."
+fi
+"""
+
 [tasks.run-web]
 description = "Run the web server (pass args after --)"
+depends = ["ensure-debug-database"]
 env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__DEV_AUTO_LOGIN = "true" }
 run = "cargo run -p health-web --"
 
