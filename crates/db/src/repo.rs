@@ -53,13 +53,21 @@ impl SqlxRepository {
         &self.pool
     }
 
-    async fn list_all(&self, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
+    async fn list_all(
+        &self,
+        user_id: Uuid,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 \
-             ORDER BY started_at DESC",
-            user_id
+             ORDER BY started_at DESC \
+             LIMIT $2 OFFSET $3",
+            user_id,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -69,14 +77,19 @@ impl SqlxRepository {
         &self,
         user_id: Uuid,
         kind: &str,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $3 OFFSET $4",
             user_id,
-            kind
+            kind,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -86,14 +99,19 @@ impl SqlxRepository {
         &self,
         user_id: Uuid,
         from: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND started_at >= $2 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $3 OFFSET $4",
             user_id,
-            from
+            from,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -103,14 +121,19 @@ impl SqlxRepository {
         &self,
         user_id: Uuid,
         to: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND started_at <= $2 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $3 OFFSET $4",
             user_id,
-            to
+            to,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -121,15 +144,20 @@ impl SqlxRepository {
         user_id: Uuid,
         kind: &str,
         from: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $4 OFFSET $5",
             user_id,
             kind,
-            from
+            from,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -140,15 +168,20 @@ impl SqlxRepository {
         user_id: Uuid,
         kind: &str,
         to: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $4 OFFSET $5",
             user_id,
             kind,
-            to
+            to,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -159,15 +192,20 @@ impl SqlxRepository {
         user_id: Uuid,
         from: chrono::DateTime<chrono::Utc>,
         to: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $4 OFFSET $5",
             user_id,
             from,
-            to
+            to,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -179,17 +217,22 @@ impl SqlxRepository {
         kind: &str,
         from: chrono::DateTime<chrono::Utc>,
         to: chrono::DateTime<chrono::Utc>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
             "SELECT id, user_id, kind, started_at, duration, notes, created_at \
              FROM exercises \
              WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
-             ORDER BY started_at DESC",
+             ORDER BY started_at DESC \
+             LIMIT $5 OFFSET $6",
             user_id,
             kind,
             from,
-            to
+            to,
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
@@ -431,17 +474,29 @@ impl SessionsRepository for SqlxRepository {
         kind: Option<ExerciseKind>,
         from: Option<chrono::DateTime<chrono::Utc>>,
         to: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<ExerciseSession>, DbError> {
         let rows: Vec<SessionRow> = match (kind, from, to) {
-            (None, None, None) => self.list_all(user_id).await?,
-            (Some(k), None, None) => self.list_by_kind(user_id, k.as_str()).await?,
-            (None, Some(f), None) => self.list_from(user_id, f).await?,
-            (None, None, Some(t)) => self.list_to(user_id, t).await?,
-            (Some(k), Some(f), None) => self.list_by_kind_from(user_id, k.as_str(), f).await?,
-            (Some(k), None, Some(t)) => self.list_by_kind_to(user_id, k.as_str(), t).await?,
-            (None, Some(f), Some(t)) => self.list_between(user_id, f, t).await?,
+            (None, None, None) => self.list_all(user_id, limit, offset).await?,
+            (Some(k), None, None) => {
+                self.list_by_kind(user_id, k.as_str(), limit, offset)
+                    .await?
+            }
+            (None, Some(f), None) => self.list_from(user_id, f, limit, offset).await?,
+            (None, None, Some(t)) => self.list_to(user_id, t, limit, offset).await?,
+            (Some(k), Some(f), None) => {
+                self.list_by_kind_from(user_id, k.as_str(), f, limit, offset)
+                    .await?
+            }
+            (Some(k), None, Some(t)) => {
+                self.list_by_kind_to(user_id, k.as_str(), t, limit, offset)
+                    .await?
+            }
+            (None, Some(f), Some(t)) => self.list_between(user_id, f, t, limit, offset).await?,
             (Some(k), Some(f), Some(t)) => {
-                self.list_by_kind_between(user_id, k.as_str(), f, t).await?
+                self.list_by_kind_between(user_id, k.as_str(), f, t, limit, offset)
+                    .await?
             }
         };
         rows.into_iter().map(TryFrom::try_from).collect()

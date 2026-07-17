@@ -32,7 +32,36 @@ local all_steps = new Mapping<String, Step> {
   }
 }
 
+local pre_commit_steps = new Mapping<String, Step> {
+  ["check-migrations"] {
+    check = "./tools/checks/check-migrations.sh"
+  }
+  ["cargo-fmt"] = Builtins.cargo_fmt
+  ["cargo-clippy"] {
+    glob = "**/*.rs"
+    workspace_indicator = "Cargo.toml"
+    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
+    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+    check_first = false
+    env {
+      ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+    }
+  }
+  ["frontend-lint"] {
+    glob = "frontend/src/**/*.{ts,tsx}"
+    check = "pnpm --dir frontend lint"
+    fix = "pnpm --dir frontend exec eslint . --fix"
+  }
+  ["frontend-typecheck"] {
+    glob = "frontend/src/**/*.{ts,tsx}"
+    check = "pnpm --dir frontend exec tsc -b"
+  }
+}
+
 hooks {
+  ["pre-commit"] {
+    steps = pre_commit_steps
+  }
   ["check"] {
     steps = all_steps
   }

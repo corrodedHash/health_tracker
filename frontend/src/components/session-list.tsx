@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { listSessions, getWeightDetails, getRunningSummary } from "@/lib/api";
@@ -77,17 +78,24 @@ function SessionRow({ session }: { session: ExerciseSession }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
 export function SessionList() {
+  const [offset, setOffset] = useState(0);
+  const [sessions, setSessions] = useState<ExerciseSession[]>([]);
+
   const q = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () => listSessions(),
+    queryKey: ["sessions", offset],
+    queryFn: () => listSessions(undefined, PAGE_SIZE, offset),
     retry: false,
   });
 
-  if (q.isLoading) {
+  const isFirstPage = offset === 0;
+
+  if (isFirstPage && q.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading sessions…</p>;
   }
-  if (q.isError || !q.data) {
+  if (isFirstPage && (q.isError || !q.data)) {
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
@@ -99,18 +107,38 @@ export function SessionList() {
       </div>
     );
   }
-  if (q.data.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No sessions logged yet.
-      </p>
-    );
+
+  const page = q.data ?? [];
+  const all = isFirstPage ? page : [...sessions, ...page];
+  if (isFirstPage) {
+    if (all.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          No sessions logged yet.
+        </p>
+      );
+    }
   }
+
+  const hasMore = page.length >= PAGE_SIZE;
+
+  const handleLoadMore = () => {
+    setSessions(all);
+    setOffset(offset + PAGE_SIZE);
+  };
+
   return (
     <div className="space-y-3">
-      {q.data.map((s) => (
+      {all.map((s) => (
         <SessionRow key={s.id} session={s} />
       ))}
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={handleLoadMore}>
+            Load more
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

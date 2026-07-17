@@ -48,8 +48,13 @@ const toSession = (dto: SessionDto): ExerciseSession => ({
 
 export async function listSessions(
   kind?: "weight" | "core" | "running",
+  limit?: number,
+  offset?: number,
 ): Promise<ExerciseSession[]> {
-  const params = kind ? { kind } : {};
+  const params: Record<string, unknown> = {};
+  if (kind) params.kind = kind;
+  if (limit !== undefined) params.limit = limit;
+  if (offset !== undefined) params.offset = offset;
   const resp = await axios.get<SessionDto[]>("/api/exercise-sessions", { params });
   return resp.data.map(toSession);
 }

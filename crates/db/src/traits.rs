@@ -24,13 +24,15 @@ use crate::error::DbError;
 /// `exercises_user_kind_started_at_idx` index).
 #[async_trait::async_trait]
 pub trait SessionsRepository: Send + Sync {
-    /// List sessions for `user_id`, optionally filtered.
+    /// List sessions for `user_id`, optionally filtered and paginated.
     async fn list(
         &self,
         user_id: Uuid,
         kind: Option<ExerciseKind>,
         from: Option<chrono::DateTime<chrono::Utc>>,
         to: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<ExerciseSession>, DbError>;
 
     /// Fetch a single session by id. Returns [`DbError::NotFound`] if absent.

@@ -49,6 +49,12 @@ else
 fi
 """
 
+[tasks.sqlx-prepare]
+description = "Regenerate the sqlx offline query cache (requires a running Postgres)"
+depends = ["ensure-debug-database"]
+env = { DATABASE_URL = "postgres://health:health@localhost:5432/health" }
+run = "cargo sqlx prepare --workspace"
+
 [tasks.run-web]
 description = "Run the web server (pass args after --)"
 depends = ["ensure-debug-database"]

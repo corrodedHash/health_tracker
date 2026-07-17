@@ -62,7 +62,7 @@ async fn sessions_insert_get_list_delete(pool: PgPool) {
     let fetched = SessionsRepository::get(&r, session.id).await.unwrap();
     assert_eq!(fetched.id, session.id);
 
-    let listed = SessionsRepository::list(&r, uid, None, None, None)
+    let listed = SessionsRepository::list(&r, uid, None, None, None, None, None)
         .await
         .unwrap();
     assert_eq!(listed.len(), 1);
@@ -89,16 +89,17 @@ async fn sessions_list_filters_by_kind_and_range(pool: PgPool) {
         .with_timezone(&Utc);
     let run = SessionsRepository::insert(&r, uid, &run).await.unwrap();
 
-    let weight_only = SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
-        .await
-        .unwrap();
+    let weight_only =
+        SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None, None, None)
+            .await
+            .unwrap();
     assert_eq!(weight_only.len(), 1);
     assert_eq!(weight_only[0].id, w.id);
 
     let from = DateTime::parse_from_rfc3339("2026-07-19T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    let recent = SessionsRepository::list(&r, uid, None, Some(from), None)
+    let recent = SessionsRepository::list(&r, uid, None, Some(from), None, None, None)
         .await
         .unwrap();
     assert_eq!(recent.len(), 1);
@@ -107,14 +108,22 @@ async fn sessions_list_filters_by_kind_and_range(pool: PgPool) {
     let to = DateTime::parse_from_rfc3339("2026-07-17T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    let early = SessionsRepository::list(&r, uid, None, None, Some(to))
+    let early = SessionsRepository::list(&r, uid, None, None, Some(to), None, None)
         .await
         .unwrap();
     assert_eq!(early.len(), 2);
 
-    let range = SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
-        .await
-        .unwrap();
+    let range = SessionsRepository::list(
+        &r,
+        uid,
+        Some(ExerciseKind::Core),
+        Some(from),
+        Some(from),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert!(range.is_empty());
     let _ = (c, run);
 }

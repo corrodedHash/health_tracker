@@ -15,6 +15,8 @@ pub struct ListParams {
     kind: Option<String>,
     from: Option<chrono::DateTime<chrono::Utc>>,
     to: Option<chrono::DateTime<chrono::Utc>>,
+    limit: Option<i64>,
+    offset: Option<i64>,
 }
 
 #[utoipa::path(
@@ -38,7 +40,16 @@ pub async fn list(
         .map_err(|e| WebError::BadRequest(e.to_string()))?;
 
     let repo = SqlxRepository::new(state.pool.clone());
-    let sessions = repo.list(user_id, kind, params.from, params.to).await?;
+    let sessions = repo
+        .list(
+            user_id,
+            kind,
+            params.from,
+            params.to,
+            params.limit,
+            params.offset,
+        )
+        .await?;
     Ok(Json(sessions))
 }
 
