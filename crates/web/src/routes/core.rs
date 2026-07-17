@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::Deserialize;
@@ -14,8 +12,6 @@ use crate::state::AppState;
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct NewCorePayload {
-    pub exercise_name: String,
-    pub duration_secs: f64,
     pub quality: Option<i32>,
 }
 
@@ -38,8 +34,6 @@ pub async fn create(
 ) -> Result<Json<serde_json::Value>, WebError> {
     let core = CoreSession {
         session_id,
-        exercise_name: body.exercise_name,
-        duration: Duration::from_secs_f64(body.duration_secs),
         quality: body.quality,
     };
     core.validate()

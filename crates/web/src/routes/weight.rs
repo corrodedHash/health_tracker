@@ -12,11 +12,18 @@ use crate::state::AppState;
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct NewWeightPayload {
-    pub exercise_name: String,
+    #[serde(default = "default_weight_kg")]
     pub weight_kg: f64,
+    #[serde(default = "default_sets")]
     pub sets: i32,
-    pub reps: i32,
     pub quality: Option<i32>,
+}
+
+const fn default_weight_kg() -> f64 {
+    12.0
+}
+const fn default_sets() -> i32 {
+    3
 }
 
 #[utoipa::path(
@@ -38,10 +45,8 @@ pub async fn create(
 ) -> Result<Json<serde_json::Value>, WebError> {
     let weight = WeightSession {
         session_id,
-        exercise_name: body.exercise_name,
         weight_kg: body.weight_kg,
         sets: body.sets,
-        reps: body.reps,
         quality: body.quality,
     };
     weight
