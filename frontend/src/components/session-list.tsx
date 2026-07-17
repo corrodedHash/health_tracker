@@ -63,14 +63,14 @@ function SessionRow({ session }: { session: ExerciseSession }) {
           <div>
             <span className="text-muted-foreground">Weight:</span>{" "}
             {weightQ.data.weight_kg}kg · {weightQ.data.sets} sets
-            {weightQ.data.quality != null && <span> · Quality: {weightQ.data.quality}/10</span>}
+            {weightQ.data.quality != null && <span> · Quality: {weightQ.data.quality}/5</span>}
           </div>
         )}
         {session.kind === "core" && coreQ.data && (
           <div>
             {coreQ.data.quality != null && (
               <span>
-                <span className="text-muted-foreground">Quality:</span> {coreQ.data.quality}/10
+                <span className="text-muted-foreground">Quality:</span> {coreQ.data.quality}/5
               </span>
             )}
           </div>
@@ -81,7 +81,7 @@ function SessionRow({ session }: { session: ExerciseSession }) {
             {(runningQ.data.distanceM / 1000).toFixed(2)} km ·{" "}
             <span className="text-muted-foreground">Pace:</span>{" "}
             {formatPace(runningQ.data.distanceM, session.durationMs)}
-            {runningQ.data.quality != null && <span> · Quality: {runningQ.data.quality}/10</span>}
+            {runningQ.data.quality != null && <span> · Quality: {runningQ.data.quality}/5</span>}
             {runningQ.data.movingDistanceM != null && (
               <div className="text-xs text-muted-foreground">
                 Moving: {(runningQ.data.movingDistanceM / 1000).toFixed(2)} km
