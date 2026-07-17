@@ -22,7 +22,6 @@ rand         = { workspace = true }
 hex          = { workspace = true }
 
 [dev-dependencies]
-serial_test  = { workspace = true }
 tokio        = { workspace = true }
 health-core  = { workspace = true }
 

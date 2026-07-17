@@ -1,12 +1,14 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, reason = "integration tests")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration tests"
+)]
 //! Postgres integration tests for the eight `SqlxRepository` trait impls.
 //!
-//! Requires a running Postgres reachable at `DATABASE_URL` (env var) or the
-//! default `postgresql://postgres:password@172.17.0.2/postgres`. Migrations
-//! are run once up front; each test serialise + TRUNCATEs the tables so they
-//! never see foreign data.
-
-use std::sync::OnceLock;
+//! Each test gets its own isolated database via `#[sqlx::test]`, which
+//! creates a fresh database from a template with migrations applied,
+//! then drops it after the test.
 
 use chrono::{DateTime, Utc};
 use health_core::{
@@ -16,48 +18,16 @@ use health_core::{
 use health_db::{
     ApiTokenRepository, CoreRepository, DbError, HeartrateRepository, OidcStateRepository,
     RunningRepository, SessionsRepository, SqlxRepository, UsersRepository, WeightRepository,
-    run_migrations,
 };
-use serial_test::serial;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-const DEFAULT_DATABASE_URL: &str = "postgresql://postgres:password@172.17.0.2/postgres";
-
-static POOL: OnceLock<PgPool> = OnceLock::new();
-
-async fn pool() -> PgPool {
-    if let Some(p) = POOL.get() {
-        return p.clone();
-    }
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_owned());
-    let p = tokio::time::timeout(std::time::Duration::from_secs(30), PgPool::connect(&url))
-        .await
-        .expect("connect timeout connecting to Postgres for db integration tests")
-        .expect("connect to Postgres for db integration tests");
-    run_migrations(&p).await.expect("run migrations");
-    let _ = POOL.set(p.clone());
-    p
+const fn repo(pool: PgPool) -> SqlxRepository {
+    SqlxRepository::new(pool)
 }
 
-async fn repo() -> SqlxRepository {
-    SqlxRepository::new(pool().await)
-}
-
-async fn truncate_all(pool: &PgPool) {
-    sqlx::query(
-        "TRUNCATE TABLE \
-            users, oidc_state, exercise_sessions, weight_exercises, \
-            core_exercises, running_sessions, heartrate_samples, api_tokens \
-            RESTART IDENTITY CASCADE",
-    )
-    .execute(pool)
-    .await
-    .expect("truncate test tables");
-}
-
-async fn make_user(repo: &SqlxRepository) -> Uuid {
-    let u = UsersRepository::upsert_by_external_id(repo, "test-sub", Some("Test User"))
+async fn make_user(r: &SqlxRepository) -> Uuid {
+    let u = UsersRepository::upsert_by_external_id(r, "test-sub", Some("Test User"))
         .await
         .expect("upsert user");
     u.id
@@ -79,13 +49,9 @@ fn new_session(kind: ExerciseKind) -> NewExerciseSession {
 // SessionsRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn sessions_insert_get_list_delete() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
-
+#[sqlx::test(migrations = "../../migrations")]
+async fn sessions_insert_get_list_delete(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let session = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Weight))
         .await
@@ -106,12 +72,9 @@ async fn sessions_insert_get_list_delete() {
     assert!(SessionsRepository::get(&r, session.id).await.is_err());
 }
 
-#[tokio::test]
-#[serial]
-async fn sessions_list_filters_by_kind_and_range() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn sessions_list_filters_by_kind_and_range(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
 
     let w = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Weight))
@@ -126,9 +89,10 @@ async fn sessions_list_filters_by_kind_and_range() {
         .with_timezone(&Utc);
     let run = SessionsRepository::insert(&r, uid, &run).await.unwrap();
 
-    let weight_only = SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
-        .await
-        .unwrap();
+    let weight_only =
+        SessionsRepository::list(&r, uid, Some(ExerciseKind::Weight), None, None)
+            .await
+            .unwrap();
     assert_eq!(weight_only.len(), 1);
     assert_eq!(weight_only[0].id, w.id);
 
@@ -149,19 +113,17 @@ async fn sessions_list_filters_by_kind_and_range() {
         .unwrap();
     assert_eq!(early.len(), 2);
 
-    let range = SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
-        .await
-        .unwrap();
+    let range =
+        SessionsRepository::list(&r, uid, Some(ExerciseKind::Core), Some(from), Some(from))
+            .await
+            .unwrap();
     assert!(range.is_empty());
     let _ = (c, run);
 }
 
-#[tokio::test]
-#[serial]
-async fn sessions_get_not_found() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn sessions_get_not_found(pool: PgPool) {
+    let r = repo(pool);
     let err = SessionsRepository::get(&r, Uuid::new_v4())
         .await
         .unwrap_err();
@@ -172,12 +134,9 @@ async fn sessions_get_not_found() {
 // WeightRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn weight_insert_and_get() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn weight_insert_and_get(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Weight))
         .await
@@ -198,12 +157,9 @@ async fn weight_insert_and_get() {
     assert_eq!(back.quality, Some(8));
 }
 
-#[tokio::test]
-#[serial]
-async fn weight_insert_kind_mismatch() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn weight_insert_kind_mismatch(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Running))
         .await
@@ -225,12 +181,9 @@ async fn weight_insert_kind_mismatch() {
 // CoreRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn core_insert_and_get() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn core_insert_and_get(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Core))
         .await
@@ -253,12 +206,9 @@ async fn core_insert_and_get() {
 // RunningRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn running_insert_get_and_gpx_blob() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn running_insert_get_and_gpx_blob(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Running))
         .await
@@ -295,12 +245,9 @@ async fn running_insert_get_and_gpx_blob() {
 // HeartrateRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn heartrate_bulk_insert_idempotent_and_list() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn heartrate_bulk_insert_idempotent_and_list(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Running))
         .await
@@ -344,12 +291,9 @@ async fn heartrate_bulk_insert_idempotent_and_list() {
     assert_eq!(listed[2].bpm, 140);
 }
 
-#[tokio::test]
-#[serial]
-async fn heartrate_insert_bulk_empty_is_zero() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn heartrate_insert_bulk_empty_is_zero(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
     let s = SessionsRepository::insert(&r, uid, &new_session(ExerciseKind::Running))
         .await
@@ -368,12 +312,9 @@ async fn heartrate_insert_bulk_empty_is_zero() {
 // UsersRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn users_upsert_inserts_then_updates() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn users_upsert_inserts_then_updates(pool: PgPool) {
+    let r = repo(pool);
 
     let u1 = UsersRepository::upsert_by_external_id(&r, "sub-1", Some("Alice"))
         .await
@@ -391,12 +332,9 @@ async fn users_upsert_inserts_then_updates() {
     assert_eq!(fetched.id, u1.id);
 }
 
-#[tokio::test]
-#[serial]
-async fn users_get_not_found() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn users_get_not_found(pool: PgPool) {
+    let r = repo(pool);
     assert!(UsersRepository::get(&r, Uuid::new_v4()).await.is_err());
 }
 
@@ -404,12 +342,9 @@ async fn users_get_not_found() {
 // OidcStateRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn oidc_state_insert_fetch_delete() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn oidc_state_insert_fetch_delete(pool: PgPool) {
+    let r = repo(pool);
 
     let state = NewOidcState {
         csrf: "csrf-1".into(),
@@ -433,17 +368,13 @@ async fn oidc_state_insert_fetch_delete() {
 // ApiTokenRepository
 // ---------------------------------------------------------------------------
 
-#[tokio::test]
-#[serial]
-async fn api_token_issue_verify_revoke_list() {
-    let p = pool().await;
-    truncate_all(&p).await;
-    let r = repo().await;
+#[sqlx::test(migrations = "../../migrations")]
+async fn api_token_issue_verify_revoke_list(pool: PgPool) {
+    let r = repo(pool);
     let uid = make_user(&r).await;
 
-    let tok: NewApiToken = ApiTokenRepository::issue(&r, uid, "matrix-bot")
-        .await
-        .unwrap();
+    let tok: NewApiToken =
+        ApiTokenRepository::issue(&r, uid, "matrix-bot").await.unwrap();
     assert_eq!(tok.user_id, uid);
     assert_eq!(tok.label, "matrix-bot");
     assert_eq!(tok.token.len(), 64);
