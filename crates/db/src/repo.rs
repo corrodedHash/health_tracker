@@ -52,6 +52,148 @@ impl SqlxRepository {
     pub const fn pool(&self) -> &PgPool {
         &self.pool
     }
+
+    async fn list_all(&self, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 \
+             ORDER BY started_at DESC",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_by_kind(
+        &self,
+        user_id: Uuid,
+        kind: &str,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND kind = $2 \
+             ORDER BY started_at DESC",
+            user_id,
+            kind
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_from(
+        &self,
+        user_id: Uuid,
+        from: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND started_at >= $2 \
+             ORDER BY started_at DESC",
+            user_id,
+            from
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_to(
+        &self,
+        user_id: Uuid,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND started_at <= $2 \
+             ORDER BY started_at DESC",
+            user_id,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_by_kind_from(
+        &self,
+        user_id: Uuid,
+        kind: &str,
+        from: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
+             ORDER BY started_at DESC",
+            user_id,
+            kind,
+            from
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_by_kind_to(
+        &self,
+        user_id: Uuid,
+        kind: &str,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
+             ORDER BY started_at DESC",
+            user_id,
+            kind,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_between(
+        &self,
+        user_id: Uuid,
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
+             ORDER BY started_at DESC",
+            user_id,
+            from,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn list_by_kind_between(
+        &self,
+        user_id: Uuid,
+        kind: &str,
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SessionRow>, sqlx::Error> {
+        sqlx::query_as!(
+            SessionRow,
+            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             FROM exercises \
+             WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
+             ORDER BY started_at DESC",
+            user_id,
+            kind,
+            from,
+            to
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
 }
 
 // ===========================================================================
@@ -291,106 +433,15 @@ impl SessionsRepository for SqlxRepository {
         to: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Vec<ExerciseSession>, DbError> {
         let rows: Vec<SessionRow> = match (kind, from, to) {
-            (None, None, None) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 \
-                     ORDER BY started_at DESC",
-                    user_id
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (Some(k), None, None) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND kind = $2 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    k.as_str()
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (None, Some(f), None) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND started_at >= $2 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    f
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (None, None, Some(t)) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND started_at <= $2 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    t
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (Some(k), Some(f), None) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    k.as_str(),
-                    f
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (Some(k), None, Some(t)) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    k.as_str(),
-                    t
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
-            (None, Some(f), Some(t)) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    f,
-                    t
-                )
-                .fetch_all(&self.pool)
-                .await?
-            }
+            (None, None, None) => self.list_all(user_id).await?,
+            (Some(k), None, None) => self.list_by_kind(user_id, k.as_str()).await?,
+            (None, Some(f), None) => self.list_from(user_id, f).await?,
+            (None, None, Some(t)) => self.list_to(user_id, t).await?,
+            (Some(k), Some(f), None) => self.list_by_kind_from(user_id, k.as_str(), f).await?,
+            (Some(k), None, Some(t)) => self.list_by_kind_to(user_id, k.as_str(), t).await?,
+            (None, Some(f), Some(t)) => self.list_between(user_id, f, t).await?,
             (Some(k), Some(f), Some(t)) => {
-                sqlx::query_as!(
-                    SessionRow,
-                    "SELECT id, user_id, kind, started_at, duration, notes, created_at \
-                     FROM exercises \
-                     WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
-                     ORDER BY started_at DESC",
-                    user_id,
-                    k.as_str(),
-                    f,
-                    t
-                )
-                .fetch_all(&self.pool)
-                .await?
+                self.list_by_kind_between(user_id, k.as_str(), f, t).await?
             }
         };
         rows.into_iter().map(TryFrom::try_from).collect()
