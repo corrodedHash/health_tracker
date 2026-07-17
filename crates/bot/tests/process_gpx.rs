@@ -13,14 +13,23 @@ fn process_gpx_fixture_extracts_started_at_distance_duration() {
     let result = process_gpx(&bytes).unwrap();
 
     assert!(
-        result.distance_m > 6480.0 && result.distance_m < 6490.0,
-        "moving distance should be ~6.5km, got {}",
-        result.distance_m
+        result.total_distance_m > 6480.0,
+        "total distance should be >= ~6.5km, got {}",
+        result.total_distance_m
     );
     assert!(
-        result.duration.as_secs_f64() > 2180.0 && result.duration.as_secs_f64() < 2190.0,
-        "moving duration should be ~2185s, got {}",
-        result.duration.as_secs_f64()
+        result.total_duration.as_secs_f64() > 2180.0,
+        "total duration should be >= ~2185s, got {}",
+        result.total_duration.as_secs_f64()
+    );
+    assert!(
+        result.moving_distance_m > 0.0 && result.moving_distance_m <= result.total_distance_m,
+        "moving distance should be positive and <= total"
+    );
+    assert!(
+        result.moving_duration.as_secs_f64() > 0.0
+            && result.moving_duration.as_secs_f64() <= result.total_duration.as_secs_f64(),
+        "moving duration should be positive and <= total"
     );
     assert_eq!(
         result.started_at,

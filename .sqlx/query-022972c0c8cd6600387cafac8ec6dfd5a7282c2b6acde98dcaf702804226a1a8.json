@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT session_id, exercise_name, weight_kg, sets, reps, quality FROM exercise_weight WHERE session_id = $1",
+  "query": "SELECT session_id, weight_kg, sets, quality FROM exercise_weight WHERE session_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,26 +10,16 @@
       },
       {
         "ordinal": 1,
-        "name": "exercise_name",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 2,
         "name": "weight_kg",
         "type_info": "Float8"
       },
       {
-        "ordinal": 3,
+        "ordinal": 2,
         "name": "sets",
         "type_info": "Int4"
       },
       {
-        "ordinal": 4,
-        "name": "reps",
-        "type_info": "Int4"
-      },
-      {
-        "ordinal": 5,
+        "ordinal": 3,
         "name": "quality",
         "type_info": "Int4"
       }
@@ -43,10 +33,8 @@
       false,
       false,
       false,
-      false,
-      false,
       true
     ]
   },
-  "hash": "91cc34ee92a14f3cd13202f39163e36738aaf2455154fe57cbaa901e21420e0c"
+  "hash": "022972c0c8cd6600387cafac8ec6dfd5a7282c2b6acde98dcaf702804226a1a8"
 }

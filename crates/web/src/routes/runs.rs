@@ -28,12 +28,12 @@ pub async fn upload_gpx(
     UserId(user_id): UserId,
     body: Bytes,
 ) -> Result<Json<health_core::ExerciseSession>, WebError> {
-    let (distance_m, duration) = parse_gpx(&body)?;
+    let (total_distance, total_duration, moving_distance, moving_duration) = parse_gpx(&body)?;
 
     let new_session = NewExerciseSession {
         kind: ExerciseKind::Running,
         started_at: health_core::chrono::Utc::now(),
-        duration,
+        duration: total_duration,
         notes: None,
     };
 
@@ -42,7 +42,10 @@ pub async fn upload_gpx(
 
     let running = RunningSession {
         session_id: session.id,
-        distance_m,
+        distance_m: total_distance,
+        quality: None,
+        moving_distance_m: Some(moving_distance),
+        moving_time: Some(moving_duration.as_secs_f64()),
         gpx_data: Some(body.to_vec()),
     };
     RunningRepository::insert(&repo, session.id, &running).await?;
@@ -82,7 +85,48 @@ pub async fn get_gpx(
     )
 }
 
-fn parse_gpx(bytes: &[u8]) -> Result<(f64, std::time::Duration), WebError> {
+fn compute_moving_distance_time(gpx: &gpx::Gpx, kmh_threshold: f64) -> (f64, std::time::Duration) {
+    let mut total_distance = 0.0;
+    let mut total_secs: f64 = 0.0;
+
+    for track in &gpx.tracks {
+        for segment in &track.segments {
+            for [a, b] in segment.points.array_windows() {
+                let (Some(ta), Some(tb)) = (a.time, b.time) else {
+                    continue;
+                };
+
+                let delta_time = health_core::time::OffsetDateTime::from(tb)
+                    - health_core::time::OffsetDateTime::from(ta);
+                let delta_secs = delta_time.as_seconds_f64();
+                let delta_distance = haversine_rs::distance(
+                    haversine_rs::point::Point::new(b.point().0.y, b.point().0.x),
+                    haversine_rs::point::Point::new(a.point().0.y, a.point().0.x),
+                    haversine_rs::units::Unit::Meters,
+                );
+
+                let hours = delta_secs / 3600.0;
+                if hours <= 0.0 {
+                    continue;
+                }
+                let kmh = (delta_distance / 1000.0) / hours;
+
+                if kmh >= kmh_threshold {
+                    total_distance += delta_distance;
+                    total_secs += delta_secs;
+                }
+            }
+        }
+    }
+
+    let total_duration = std::time::Duration::from_secs_f64(total_secs);
+
+    (total_distance, total_duration)
+}
+
+fn parse_gpx(
+    bytes: &[u8],
+) -> Result<(f64, std::time::Duration, f64, std::time::Duration), WebError> {
     let cursor = Cursor::new(bytes);
     let gpx = gpx::read(cursor).map_err(|e| WebError::BadRequest(format!("invalid GPX: {e}")))?;
 
@@ -119,7 +163,7 @@ fn parse_gpx(bytes: &[u8]) -> Result<(f64, std::time::Duration), WebError> {
         }
     }
 
-    let duration = match (first_time, last_time) {
+    let total_duration = match (first_time, last_time) {
         (Some(first), Some(last)) => last
             .signed_duration_since(first)
             .to_std()
@@ -127,5 +171,12 @@ fn parse_gpx(bytes: &[u8]) -> Result<(f64, std::time::Duration), WebError> {
         _ => std::time::Duration::ZERO,
     };
 
-    Ok((total_distance, duration))
+    let (moving_distance, moving_duration) = compute_moving_distance_time(&gpx, 1.5);
+
+    Ok((
+        total_distance,
+        total_duration,
+        moving_distance,
+        moving_duration,
+    ))
 }

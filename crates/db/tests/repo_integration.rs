@@ -151,16 +151,14 @@ async fn weight_insert_and_get(pool: PgPool) {
 
     let row = WeightSession {
         session_id: s.id,
-        exercise_name: "bench".into(),
         weight_kg: 80.0,
         sets: 3,
-        reps: 5,
         quality: Some(8),
     };
     WeightRepository::insert(&r, s.id, &row).await.unwrap();
     let back = WeightRepository::get_by_session(&r, s.id).await.unwrap();
-    assert_eq!(back.exercise_name, "bench");
     assert!((back.weight_kg - 80.0).abs() < f64::EPSILON);
+    assert_eq!(back.sets, 3);
     assert_eq!(back.quality, Some(8));
 }
 
@@ -174,10 +172,8 @@ async fn weight_insert_kind_mismatch(pool: PgPool) {
 
     let row = WeightSession {
         session_id: s.id,
-        exercise_name: "bench".into(),
         weight_kg: 80.0,
         sets: 3,
-        reps: 5,
         quality: None,
     };
     let err = WeightRepository::insert(&r, s.id, &row).await.unwrap_err();
@@ -198,14 +194,10 @@ async fn core_insert_and_get(pool: PgPool) {
 
     let row = CoreSession {
         session_id: s.id,
-        exercise_name: "plank".into(),
-        duration: std::time::Duration::from_mins(1),
         quality: Some(7),
     };
     CoreRepository::insert(&r, s.id, &row).await.unwrap();
     let back = CoreRepository::get_by_session(&r, s.id).await.unwrap();
-    assert_eq!(back.exercise_name, "plank");
-    assert_eq!(back.duration, std::time::Duration::from_mins(1));
     assert_eq!(back.quality, Some(7));
 }
 
@@ -225,6 +217,9 @@ async fn running_insert_get_and_gpx_blob(pool: PgPool) {
     let row = RunningSession {
         session_id: s.id,
         distance_m: 5_000.0,
+        quality: None,
+        moving_distance_m: Some(4_800.0),
+        moving_time: Some(1800.0),
         gpx_data: Some(blob.clone()),
     };
     RunningRepository::insert(&r, s.id, &row).await.unwrap();
@@ -242,6 +237,9 @@ async fn running_insert_get_and_gpx_blob(pool: PgPool) {
     let row2 = RunningSession {
         session_id: s2.id,
         distance_m: 100.0,
+        quality: None,
+        moving_distance_m: None,
+        moving_time: None,
         gpx_data: None,
     };
     RunningRepository::insert(&r, s2.id, &row2).await.unwrap();

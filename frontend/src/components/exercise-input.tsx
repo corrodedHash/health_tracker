@@ -21,10 +21,8 @@ export function ExerciseInput() {
   const [durationMin, setDurationMin] = useState("30");
   const [notes, setNotes] = useState("");
 
-  const [exerciseName, setExerciseName] = useState("");
-  const [weightKg, setWeightKg] = useState("");
-  const [sets, setSets] = useState("");
-  const [reps, setReps] = useState("");
+  const [weightKg, setWeightKg] = useState("12");
+  const [sets, setSets] = useState("3");
   const [quality, setQuality] = useState("");
   const [distanceM, setDistanceM] = useState("");
 
@@ -46,21 +44,18 @@ export function ExerciseInput() {
 
       if (kind === "weight") {
         await createWeightDetails(session.id, {
-          exercise_name: exerciseName.trim(),
-          weight_kg: Number(weightKg),
-          sets: Number(sets),
-          reps: Number(reps),
+          weight_kg: Number(weightKg) || 12,
+          sets: Number(sets) || 3,
           quality: quality.trim() ? Number(quality) : null,
         });
       } else if (kind === "core") {
         await createCoreDetails(session.id, {
-          exercise_name: exerciseName.trim(),
-          duration_secs: durationMs / 1000,
           quality: quality.trim() ? Number(quality) : null,
         });
       } else if (kind === "running") {
         await createRunningDetails(session.id, {
           distance_m: Number(distanceM),
+          quality: quality.trim() ? Number(quality) : null,
         });
       }
 
@@ -85,7 +80,9 @@ export function ExerciseInput() {
 
   const onKindChange = (k: ExerciseKind) => {
     document.querySelectorAll<HTMLButtonElement>("[data-kind]").forEach((el) => {
-      el.dataset.kind && el.setAttribute("data-active", String(el.dataset.kind === k));
+      if (el.dataset.kind) {
+        el.setAttribute("data-active", String(el.dataset.kind === k));
+      }
     });
     setKind(k);
   };
@@ -144,21 +141,8 @@ export function ExerciseInput() {
             </div>
           </div>
 
-          {(kind === "weight" || kind === "core") && (
-            <div className="space-y-2">
-              <Label htmlFor="exercise_name">Exercise name</Label>
-              <Input
-                id="exercise_name"
-                type="text"
-                value={exerciseName}
-                placeholder="e.g. bench press"
-                onChange={(e) => setExerciseName(e.target.value)}
-              />
-            </div>
-          )}
-
           {kind === "weight" && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="weight_kg">Weight (kg)</Label>
                 <Input
@@ -167,6 +151,7 @@ export function ExerciseInput() {
                   min="0"
                   step="0.5"
                   value={weightKg}
+                  placeholder="12"
                   onChange={(e) => setWeightKg(e.target.value)}
                 />
               </div>
@@ -177,17 +162,8 @@ export function ExerciseInput() {
                   type="number"
                   min="1"
                   value={sets}
+                  placeholder="3"
                   onChange={(e) => setSets(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reps">Reps</Label>
-                <Input
-                  id="reps"
-                  type="number"
-                  min="1"
-                  value={reps}
-                  onChange={(e) => setReps(e.target.value)}
                 />
               </div>
             </div>
@@ -207,20 +183,18 @@ export function ExerciseInput() {
             </div>
           )}
 
-          {(kind === "weight" || kind === "core") && (
-            <div className="space-y-2">
-              <Label htmlFor="quality">Quality (1–10, optional)</Label>
-              <Input
-                id="quality"
-                type="number"
-                min="1"
-                max="10"
-                value={quality}
-                placeholder="optional"
-                onChange={(e) => setQuality(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="quality">Quality (1–10, optional)</Label>
+            <Input
+              id="quality"
+              type="number"
+              min="1"
+              max="10"
+              value={quality}
+              placeholder="optional"
+              onChange={(e) => setQuality(e.target.value)}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
