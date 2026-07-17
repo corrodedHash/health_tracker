@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import type {
   CoreCreate,
   CoreSession,
+  ExerciseKind,
   ExerciseSession,
   NewExerciseSession,
   RunningCreate,
@@ -14,10 +15,11 @@ import type {
 export interface SessionDto {
   id: string;
   user_id: string;
-  kind: "weight" | "core" | "running";
+  kind: "weight" | "core" | "running" | "custom";
   started_at: string;
   duration_secs: number;
   notes: string | null;
+  quality: number | null;
   created_at: string;
 }
 
@@ -44,11 +46,12 @@ const toSession = (dto: SessionDto): ExerciseSession => ({
   startedAt: dayjs.utc(dto.started_at).toDate(),
   durationMs: dto.duration_secs * 1000,
   notes: dto.notes,
+  quality: dto.quality,
   createdAt: dayjs.utc(dto.created_at).toDate(),
 });
 
 export async function listSessions(
-  kind?: "weight" | "core" | "running",
+  kind?: ExerciseKind,
   limit?: number,
   offset?: number,
 ): Promise<ExerciseSession[]> {
@@ -68,6 +71,7 @@ export async function createSession(
     started_at: body.startedAt.toISOString(),
     duration_secs: body.durationMs / 1000,
     notes: body.notes,
+    quality: body.quality,
   }, {
     headers: { "Content-Type": "application/json" },
   });

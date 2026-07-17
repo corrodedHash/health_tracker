@@ -35,6 +35,7 @@ pub async fn upload_gpx(
         started_at: health_core::chrono::Utc::now(),
         duration: total_duration,
         notes: None,
+        quality: None,
     };
 
     let repo = SqlxRepository::new(state.pool.clone());

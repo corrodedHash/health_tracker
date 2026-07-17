@@ -45,11 +45,12 @@ pub enum ExerciseKind {
     Weight,
     Core,
     Running,
+    Custom,
 }
 
 impl ExerciseKind {
     /// All known variants — used by tests for exhaustive checks.
-    pub const ALL: [Self; 3] = [Self::Weight, Self::Core, Self::Running];
+    pub const ALL: [Self; 4] = [Self::Weight, Self::Core, Self::Running, Self::Custom];
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -57,6 +58,7 @@ impl ExerciseKind {
             Self::Weight => "weight",
             Self::Core => "core",
             Self::Running => "running",
+            Self::Custom => "custom",
         }
     }
 }
@@ -74,6 +76,7 @@ impl std::str::FromStr for ExerciseKind {
             "weight" => Ok(Self::Weight),
             "core" => Ok(Self::Core),
             "running" => Ok(Self::Running),
+            "custom" => Ok(Self::Custom),
             other => Err(UnknownExerciseKind(other.to_owned())),
         }
     }
@@ -102,6 +105,7 @@ pub struct ExerciseSession {
     #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,
+    pub quality: Option<i32>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -120,6 +124,7 @@ pub struct NewExerciseSession {
     #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,
+    pub quality: Option<i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -277,9 +282,14 @@ impl NewExerciseSession {
     ///
     /// # Errors
     /// Returns [`ValidationError::NonPositiveDuration`] if `duration` is zero.
-    pub const fn validate(&self) -> Result<(), ValidationError> {
+    pub fn validate(&self) -> Result<(), ValidationError> {
         if self.duration.is_zero() {
             return Err(ValidationError::NonPositiveDuration(self.duration));
+        }
+        if let Some(q) = self.quality
+            && !(1..=10).contains(&q)
+        {
+            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
@@ -374,6 +384,7 @@ mod tests {
                 .with_timezone(&Utc),
             duration: std::time::Duration::from_mins(1),
             notes: None,
+            quality: None,
         }
     }
 

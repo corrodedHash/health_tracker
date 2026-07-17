@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, user_id, kind, started_at, duration, notes, created_at FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 ORDER BY started_at DESC LIMIT $4 OFFSET $5",
+  "query": "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at FROM exercises WHERE user_id = $1 AND kind = $2 ORDER BY started_at DESC LIMIT $3 OFFSET $4",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,11 @@
       },
       {
         "ordinal": 6,
+        "name": "quality",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz"
       }
@@ -42,8 +47,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Timestamptz",
-        "Timestamptz",
+        "Text",
         "Int8",
         "Int8"
       ]
@@ -55,8 +59,9 @@
       false,
       false,
       true,
+      true,
       false
     ]
   },
-  "hash": "7640efadd4ddaeccfb14d9905aac0153160a05ed378d6e8f91fba82280555d04"
+  "hash": "c721aa5a7a6ed9d52042257e3cde96ea597dfb44a21fc33bd467c7f063c33736"
 }

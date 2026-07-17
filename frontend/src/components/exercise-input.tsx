@@ -12,18 +12,18 @@ import {
 } from "@/lib/api";
 import type { ExerciseKind } from "@/types";
 
-const KINDS: ExerciseKind[] = ["weight", "core", "running"];
+const KINDS: ExerciseKind[] = ["weight", "core", "running", "custom"];
 
 export function ExerciseInput() {
   const qc = useQueryClient();
   const [kind, setKind] = useState<ExerciseKind>("weight");
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [durationMin, setDurationMin] = useState("30");
+  const [quality, setQuality] = useState("");
   const [notes, setNotes] = useState("");
 
   const [weightKg, setWeightKg] = useState("12");
   const [sets, setSets] = useState("3");
-  const [quality, setQuality] = useState("");
   const [distanceM, setDistanceM] = useState("");
 
   const startOidcResume = (formData: URLSearchParams) => {
@@ -40,6 +40,7 @@ export function ExerciseInput() {
         startedAt: new Date(startedAt),
         durationMs,
         notes: notes.trim() || null,
+        quality: quality.trim() ? Number(quality) : null,
       });
 
       if (kind === "weight") {
@@ -78,40 +79,30 @@ export function ExerciseInput() {
     },
   });
 
-  const onKindChange = (k: ExerciseKind) => {
-    document.querySelectorAll<HTMLButtonElement>("[data-kind]").forEach((el) => {
-      if (el.dataset.kind) {
-        el.setAttribute("data-active", String(el.dataset.kind === k));
-      }
-    });
-    setKind(k);
-  };
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Log an exercise</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            mutation.mutate();
-          }}
-        >
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        mutation.mutate();
+      }}
+    >
+      {/* Card 1: Common fields for every exercise type */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Session</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Kind</Label>
-            <div className="flex gap-2">
+            <Label>Type</Label>
+            <div className="flex gap-2 flex-wrap">
               {KINDS.map((k) => (
                 <Button
                   key={k}
                   type="button"
                   variant={kind === k ? "default" : "outline"}
                   size="sm"
-                  onClick={() => onKindChange(k)}
-                  data-kind={k}
-                  data-active={String(kind === k)}
+                  onClick={() => setKind(k)}
                 >
                   <span className="capitalize">{k}</span>
                 </Button>
@@ -141,48 +132,6 @@ export function ExerciseInput() {
             </div>
           </div>
 
-          {kind === "weight" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="weight_kg">Weight (kg)</Label>
-                <Input
-                  id="weight_kg"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={weightKg}
-                  placeholder="12"
-                  onChange={(e) => setWeightKg(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sets">Sets</Label>
-                <Input
-                  id="sets"
-                  type="number"
-                  min="1"
-                  value={sets}
-                  placeholder="3"
-                  onChange={(e) => setSets(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          {kind === "running" && (
-            <div className="space-y-2">
-              <Label htmlFor="distance_m">Distance (m)</Label>
-              <Input
-                id="distance_m"
-                type="number"
-                min="0"
-                step="1"
-                value={distanceM}
-                onChange={(e) => setDistanceM(e.target.value)}
-              />
-            </div>
-          )}
-
           <div className="space-y-2">
             <Label htmlFor="quality">Quality (1–10, optional)</Label>
             <Input
@@ -202,16 +151,68 @@ export function ExerciseInput() {
               id="notes"
               type="text"
               value={notes}
-              placeholder="optional"
+              placeholder={
+                kind === "custom" ? "Describe what you did" : "optional"
+              }
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving…" : "Add session"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      {/* Card 2: Type-specific fields (hidden for custom) */}
+      {kind !== "custom" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="capitalize">{kind} details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {kind === "weight" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="weight_kg">Weight (kg)</Label>
+                  <Input
+                    id="weight_kg"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sets">Sets</Label>
+                  <Input
+                    id="sets"
+                    type="number"
+                    min="1"
+                    value={sets}
+                    onChange={(e) => setSets(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {kind === "running" && (
+              <div className="space-y-2">
+                <Label htmlFor="distance_m">Distance (m)</Label>
+                <Input
+                  id="distance_m"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={distanceM}
+                  onChange={(e) => setDistanceM(e.target.value)}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Button type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? "Saving…" : "Add session"}
+      </Button>
+    </form>
   );
 }

@@ -1,4 +1,4 @@
-export type ExerciseKind = "weight" | "core" | "running";
+export type ExerciseKind = "weight" | "core" | "running" | "custom";
 
 export interface ExerciseSession {
   id: string;
@@ -7,6 +7,7 @@ export interface ExerciseSession {
   startedAt: Date;
   durationMs: number;
   notes: string | null;
+  quality: number | null;
   createdAt: Date;
 }
 
@@ -15,6 +16,7 @@ export interface NewExerciseSession {
   startedAt: Date;
   durationMs: number;
   notes: string | null;
+  quality: number | null;
 }
 
 export interface WeightSession {

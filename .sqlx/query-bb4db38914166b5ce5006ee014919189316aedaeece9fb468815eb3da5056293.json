@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, user_id, kind, started_at, duration, notes, created_at FROM exercises WHERE user_id = $1 AND kind = $2 ORDER BY started_at DESC LIMIT $3 OFFSET $4",
+  "query": "INSERT INTO exercises (user_id, kind, started_at, duration, notes, quality) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, user_id, kind, started_at, duration, notes, quality, created_at",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,11 @@
       },
       {
         "ordinal": 6,
+        "name": "quality",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz"
       }
@@ -43,8 +48,10 @@
       "Left": [
         "Uuid",
         "Text",
-        "Int8",
-        "Int8"
+        "Timestamptz",
+        "Interval",
+        "Text",
+        "Int4"
       ]
     },
     "nullable": [
@@ -54,8 +61,9 @@
       false,
       false,
       true,
+      true,
       false
     ]
   },
-  "hash": "9c12caa3f1bfc28ca2882ccd61228f57b85a606f11f8054b2eeadd5978b29211"
+  "hash": "bb4db38914166b5ce5006ee014919189316aedaeece9fb468815eb3da5056293"
 }

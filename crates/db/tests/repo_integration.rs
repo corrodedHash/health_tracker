@@ -42,6 +42,7 @@ fn new_session(kind: ExerciseKind) -> NewExerciseSession {
             .with_timezone(&Utc),
         duration: std::time::Duration::from_mins(30),
         notes: Some("test session".into()),
+        quality: None,
     }
 }
 
