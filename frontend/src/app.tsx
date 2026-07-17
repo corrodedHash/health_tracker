@@ -78,6 +78,9 @@ function useResumeToken() {
       .post("/api/exercise-sessions", payload, {
         headers: { "Content-Type": "application/json" },
       })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["sessions"] });
+      })
       .catch((err) => {
         if (!axios.isAxiosError(err)) return;
         if (
@@ -89,8 +92,7 @@ function useResumeToken() {
           console.error("Unauthorized: resume token may be expired.");
         }
       })
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ["sessions"] });
+      .finally(() => {
         window.history.replaceState({}, "", "/");
       });
   }, [qc]);
@@ -104,6 +106,7 @@ export default function App() {
     queryKey: ["auth", "status"],
     queryFn: checkAuth,
     retry: false,
+    refetchInterval: 60_000,
   });
 
   const logout = useMutation({
@@ -118,17 +121,35 @@ export default function App() {
 
   const logoutClick = useCallback(() => logout.mutate(), [logout]);
 
+  if (authQ.isPending) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+        <header className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">Health Tracker</h1>
+        </header>
+        <p className="text-sm text-muted-foreground">Checking authentication…</p>
+      </div>
+    );
+  }
+
+  if (!authQ.data) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+        <header className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">Health Tracker</h1>
+        </header>
+        <LoginPage />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Health Tracker</h1>
-        {authQ.data ? (
-          <Button onClick={logoutClick} variant="outline" size="sm">
-            Logout
-          </Button>
-        ) : (
-          <LoginPage />
-        )}
+        <Button onClick={logoutClick} variant="outline" size="sm">
+          Logout
+        </Button>
       </header>
 
       <ExerciseInput />
