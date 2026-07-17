@@ -1,5 +1,6 @@
 {
   "name": "health-tracker-frontend",
+  "packageManager": "pnpm@11.13.0",
   "private": true,
   "version": "0.0.0",
   "type": "module",

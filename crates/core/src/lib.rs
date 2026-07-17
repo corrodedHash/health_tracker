@@ -95,7 +95,10 @@ pub struct ExerciseSession {
     pub user_id: Uuid,
     pub kind: ExerciseKind,
     pub started_at: DateTime<Utc>,
-    #[serde(rename = "duration_secs", with = "crate::duration_ext::serde_duration_secs")]
+    #[serde(
+        rename = "duration_secs",
+        with = "crate::duration_ext::serde_duration_secs"
+    )]
     #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,
@@ -110,7 +113,10 @@ pub struct ExerciseSession {
 pub struct NewExerciseSession {
     pub kind: ExerciseKind,
     pub started_at: DateTime<Utc>,
-    #[serde(rename = "duration_secs", with = "crate::duration_ext::serde_duration_secs")]
+    #[serde(
+        rename = "duration_secs",
+        with = "crate::duration_ext::serde_duration_secs"
+    )]
     #[schema(value_type = f64)]
     pub duration: std::time::Duration,
     pub notes: Option<String>,

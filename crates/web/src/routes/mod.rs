@@ -17,8 +17,7 @@ pub fn build_router(state: AppState) -> Router {
     let session_layer = session::SessionAuthLayer::new(state.cookie_key.clone());
     let bearer_layer = bearer::BearerAuthLayer::new(state.pool.clone());
 
-    let openapi_route = Router::new()
-        .route("/openapi.json", routing::get(openapi::serve));
+    let openapi_route = Router::new().route("/openapi.json", routing::get(openapi::serve));
 
     let session_routes = Router::new()
         .route(
@@ -48,9 +47,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", routing::post(auth::logout))
         .route("/status", routing::get(auth::status));
 
-    let api_routes = openapi_route
-        .merge(session_routes)
-        .merge(bearer_routes);
+    let api_routes = openapi_route.merge(session_routes).merge(bearer_routes);
 
     let mut app = Router::new()
         .nest("/api", api_routes)

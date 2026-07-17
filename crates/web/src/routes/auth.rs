@@ -64,9 +64,10 @@ pub async fn login(
             })
             .unwrap_or("http://localhost:5173");
 
-        let location = params
-            .resume_token
-            .map_or_else(|| format!("{base}/"), |t| format!("{base}/?resume_token={t}"));
+        let location = params.resume_token.map_or_else(
+            || format!("{base}/"),
+            |t| format!("{base}/?resume_token={t}"),
+        );
 
         return Ok((
             StatusCode::FOUND,
@@ -167,10 +168,7 @@ pub async fn logout(State(state): State<AppState>) -> Result<Response, WebError>
     ),
     tag = "auth",
 )]
-pub async fn status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Json<serde_json::Value> {
+pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> Json<serde_json::Value> {
     let authenticated = headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())

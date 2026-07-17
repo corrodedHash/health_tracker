@@ -31,13 +31,10 @@ async fn pool() -> PgPool {
         return p.clone();
     }
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_owned());
-    let p = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        PgPool::connect(&url),
-    )
-    .await
-    .expect("connect timeout connecting to Postgres for db integration tests")
-    .expect("connect to Postgres for db integration tests");
+    let p = tokio::time::timeout(std::time::Duration::from_secs(30), PgPool::connect(&url))
+        .await
+        .expect("connect timeout connecting to Postgres for db integration tests")
+        .expect("connect to Postgres for db integration tests");
     run_migrations(&p).await.expect("run migrations");
     let _ = POOL.set(p.clone());
     p
