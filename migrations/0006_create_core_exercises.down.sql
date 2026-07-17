@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS core_exercises;
+DROP TABLE IF EXISTS exercise_core;

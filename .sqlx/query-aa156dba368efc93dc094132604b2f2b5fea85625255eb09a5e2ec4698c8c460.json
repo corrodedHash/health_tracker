@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT csrf, code_verifier, nonce, resume_token, created_at FROM oidc_state WHERE csrf = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "csrf",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "code_verifier",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "nonce",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "resume_token",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "aa156dba368efc93dc094132604b2f2b5fea85625255eb09a5e2ec4698c8c460"
+}

@@ -21,7 +21,7 @@ use crate::error::DbError;
 ///
 /// `kind`, `from`, `to` are all optional; passing `None` skips the
 /// filter. Rows come back newest `started_at` first (mirrors the
-/// `exercise_sessions_user_kind_started_at_idx` index).
+/// `exercises_user_kind_started_at_idx` index).
 #[async_trait::async_trait]
 pub trait SessionsRepository: Send + Sync {
     /// List sessions for `user_id`, optionally filtered and paginated.
@@ -54,7 +54,7 @@ pub trait SessionsRepository: Send + Sync {
     async fn delete(&self, id: Uuid) -> Result<bool, DbError>;
 }
 
-/// `weight_exercises` rows.
+/// `exercise_weight` rows.
 #[async_trait::async_trait]
 pub trait WeightRepository: Send + Sync {
     /// Attach a weight-exercise child row to session `id`. The parent
@@ -66,7 +66,7 @@ pub trait WeightRepository: Send + Sync {
     async fn get_by_session(&self, session_id: Uuid) -> Result<WeightSession, DbError>;
 }
 
-/// `core_exercises` rows.
+/// `exercise_core` rows.
 #[async_trait::async_trait]
 pub trait CoreRepository: Send + Sync {
     async fn insert(&self, session_id: Uuid, row: &CoreSession) -> Result<(), DbError>;
@@ -74,7 +74,7 @@ pub trait CoreRepository: Send + Sync {
     async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError>;
 }
 
-/// `running_sessions` rows.
+/// `exercise_running` rows.
 #[async_trait::async_trait]
 pub trait RunningRepository: Send + Sync {
     /// Insert a running child row. Setting `gpx_data` is optional
