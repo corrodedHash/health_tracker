@@ -61,7 +61,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 \
              ORDER BY started_at DESC \
              LIMIT $2 OFFSET $3",
@@ -82,7 +82,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 \
              ORDER BY started_at DESC \
              LIMIT $3 OFFSET $4",
@@ -104,7 +104,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND started_at >= $2 \
              ORDER BY started_at DESC \
              LIMIT $3 OFFSET $4",
@@ -126,7 +126,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND started_at <= $2 \
              ORDER BY started_at DESC \
              LIMIT $3 OFFSET $4",
@@ -149,7 +149,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at >= $3 \
              ORDER BY started_at DESC \
              LIMIT $4 OFFSET $5",
@@ -173,7 +173,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND kind = $2 AND started_at <= $3 \
              ORDER BY started_at DESC \
              LIMIT $4 OFFSET $5",
@@ -197,7 +197,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE user_id = $1 AND started_at BETWEEN $2 AND $3 \
              ORDER BY started_at DESC \
              LIMIT $4 OFFSET $5",
@@ -222,7 +222,7 @@ impl SqlxRepository {
     ) -> Result<Vec<SessionRow>, sqlx::Error> {
         sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises \
              WHERE user_id = $1 AND kind = $2 AND started_at BETWEEN $3 AND $4 \
              ORDER BY started_at DESC \
@@ -251,6 +251,7 @@ struct SessionRow {
     started_at: chrono::DateTime<chrono::Utc>,
     duration: PgInterval,
     notes: Option<String>,
+    quality: Option<i32>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -268,6 +269,7 @@ impl TryFrom<SessionRow> for ExerciseSession {
             started_at: r.started_at,
             duration: interval_to_std(r.duration)?,
             notes: r.notes,
+            quality: r.quality,
             created_at: r.created_at,
         })
     }
@@ -505,7 +507,7 @@ impl SessionsRepository for SqlxRepository {
     async fn get(&self, id: Uuid) -> Result<ExerciseSession, DbError> {
         let row = sqlx::query_as!(
             SessionRow,
-            "SELECT id, user_id, kind, started_at, duration, notes, created_at \
+             "SELECT id, user_id, kind, started_at, duration, notes, quality, created_at \
              FROM exercises WHERE id = $1",
             id
         )
@@ -525,14 +527,15 @@ impl SessionsRepository for SqlxRepository {
     ) -> Result<ExerciseSession, DbError> {
         let row = sqlx::query_as!(
             SessionRow,
-            "INSERT INTO exercises (user_id, kind, started_at, duration, notes) \
-             VALUES ($1, $2, $3, $4, $5) \
-             RETURNING id, user_id, kind, started_at, duration, notes, created_at",
+            "INSERT INTO exercises (user_id, kind, started_at, duration, notes, quality) \
+              VALUES ($1, $2, $3, $4, $5, $6) \
+              RETURNING id, user_id, kind, started_at, duration, notes, quality, created_at",
             user_id,
             new.kind.as_str(),
             new.started_at,
             std_to_interval(new.duration),
-            new.notes.as_deref()
+            new.notes.as_deref(),
+            new.quality
         )
         .fetch_one(&self.pool)
         .await
