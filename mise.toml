@@ -19,7 +19,11 @@ run = "cargo build --release"
 [tasks.ensure-debug-database]
 description = "Start a --rm PostgreSQL if one isn't already running on localhost:5432"
 run = """
-if ! nc -z localhost 5432 2>/dev/null; then
+if ! command -v pg_isready &>/dev/null; then
+  echo "pg_isready not found — skipping Postgres health check."
+  exit 0
+fi
+if ! pg_isready -h localhost -p 5432 -q 2>/dev/null; then
   echo "No PostgreSQL found on localhost:5432, starting temporary container..."
   docker run --rm -d --name ht-postgres-ensure \
     -e POSTGRES_USER=health \
@@ -28,7 +32,7 @@ if ! nc -z localhost 5432 2>/dev/null; then
     -p 5432:5432 postgres:16
   echo "Waiting for PostgreSQL to be ready..."
   for i in $(seq 1 30); do
-    if nc -z localhost 5432 2>/dev/null; then
+    if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
       echo "PostgreSQL is ready."
       break
     fi
