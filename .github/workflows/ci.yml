@@ -33,7 +33,7 @@ jobs:
           fi
 
   fmt:
-    name: cargo fmt
+    name: Backend Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
         run: cargo fmt --all -- --check
 
   clippy:
-    name: cargo clippy
+    name: Backend Linting
     needs: [fmt]
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +60,7 @@ jobs:
         run: ./tools/checks/check-migrations.sh "${{ github.event.pull_request.base.sha || 'origin/main' }}"
 
   test:
-    name: cargo test
+    name: Backend Testing
     needs: [clippy]
     runs-on: ubuntu-latest
     services:
@@ -91,7 +91,7 @@ jobs:
         run: cargo test --workspace --all-features
 
   frontend:
-    name: frontend build
+    name: Frontend Building
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
