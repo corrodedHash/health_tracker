@@ -11,6 +11,7 @@ hk = "1"
 [env]
 # Tight mise integration: wraps hk hooks with `mise x` so tools are in PATH.
 HK_MISE = "1"
+DATABASE_URL = "postgres://health:health@localhost:5432/health"
 
 [tasks.build]
 description = "Build the debug binaries (health-web, health-bot)"
@@ -22,53 +23,12 @@ run = "cargo build --release"
 
 [tasks.ensure-debug-database]
 description = "Start a --rm PostgreSQL if one isn't already running on localhost:5432"
-run = """
-if ! command -v pg_isready &>/dev/null; then
-  echo "pg_isready not found — skipping Postgres health check."
-  exit 0
-fi
-if ! pg_isready -h localhost -p 5432 -q 2>/dev/null; then
-  echo "No PostgreSQL found on localhost:5432, starting temporary container..."
-  docker run --rm -d --name ht-postgres-ensure \
-    -e POSTGRES_USER=health \
-    -e POSTGRES_PASSWORD=health \
-    -e POSTGRES_DB=health \
-    -p 5432:5432 postgres:16
-  echo "Waiting for PostgreSQL to be ready..."
-  for i in $(seq 1 30); do
-    if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
-      echo "PostgreSQL is ready."
-      break
-    fi
-    sleep 1
-  done
-else
-  echo "PostgreSQL already running on localhost:5432."
-fi
-"""
+run = "./tools/ensure-debug-database.sh"
 
-[tasks.sqlx-prepare]
+[tasks.regenerate-sqlx]
 description = "Regenerate the sqlx offline query cache using a per-branch database to avoid worktree conflicts"
 depends = ["ensure-debug-database"]
-run = """
-set -euo pipefail
-
-BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$BRANCH" = "HEAD" ]; then
-  BRANCH="detached-$(git rev-parse --short HEAD)"
-fi
-BRANCH_SLUG="$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g; s/^-//; s/-$//')"
-BRANCH_HASH="$(echo "$BRANCH" | md5sum | head -c 8)"
-DB_NAME="ht_prepare_${BRANCH_SLUG}_${BRANCH_HASH}"
-
-export DATABASE_URL="postgres://health:health@localhost:5432/${DB_NAME}"
-
-# Fresh database so each branch always has a clean isolated schema
-cargo sqlx database reset -y
-
-# Regenerate the offline query cache against this branch's schema
-cargo sqlx prepare --workspace
-"""
+run = "./tools/regenerate-sqlx.sh"
 
 [tasks.run-web]
 description = "Run the web server (pass args after --)"
@@ -83,7 +43,6 @@ run = "cargo run -p health-bot --"
 [tasks.test]
 description = "Run the test suite"
 depends = ["ensure-debug-database"]
-env = { DATABASE_URL = "postgres://health:health@localhost:5432/health" }
 run = "cargo test --all-features"
 
 [tasks.frontend-install]
@@ -102,21 +61,3 @@ run = "pnpm --dir frontend build"
 [tasks.frontend-lint]
 description = "Lint the frontend"
 run = "pnpm --dir frontend lint"
-
-[tasks.db-up]
-description = "Start a PostgreSQL container for local development"
-run = """
-docker rm -f ht-postgres 2>/dev/null || true
-docker run -d --name ht-postgres \
-  -e POSTGRES_USER=health \
-  -e POSTGRES_PASSWORD=health \
-  -e POSTGRES_DB=health \
-  -p 5432:5432 postgres:16
-"""
-
-[tasks.db-down]
-description = "Stop the PostgreSQL container"
-run = "docker rm -f ht-postgres 2>/dev/null || true"
-
-# Releases are automated via release-please (Google) — see the
-# release-please.yml workflow and release-please-config.json at the root.
