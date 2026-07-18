@@ -265,7 +265,7 @@ pub enum ValidationError {
     NegativeOffset(i32),
     #[error("distance_m must be non-negative (got {0})")]
     NegativeDistance(i32),
-    #[error("quality must be in 1..=10 (got {0})")]
+    #[error("quality must be in 1..=5 (got {0})")]
     QualityOutOfRange(i32),
 }
 
@@ -279,7 +279,7 @@ impl NewExerciseSession {
             return Err(ValidationError::NonPositiveDuration(self.duration));
         }
         if let Some(q) = self.quality
-            && !(1..=10).contains(&q)
+            && !(1..=5).contains(&q)
         {
             return Err(ValidationError::QualityOutOfRange(q));
         }

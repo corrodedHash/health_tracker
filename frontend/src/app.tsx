@@ -1,50 +1,16 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 
 import { ExerciseInput } from "@/components/exercise-input";
 import { LoginPage } from "@/components/login-page";
 import { SessionList } from "@/components/session-list";
-import { WeightOverTimeChart } from "@/components/weight-chart";
+import { RunningPaceChart } from "@/components/running-pace-chart";
+import { RunningDistanceChart } from "@/components/running-distance-chart";
+import { CalendarHeatmap } from "@/components/calendar-heatmap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { checkAuth, getWeightDetails, listSessions } from "@/lib/api";
-import type { WeightSession } from "@/types";
-
-interface WeightedSessionEntry {
-  session: { id: string; startedAt: Date };
-  weight: WeightSession;
-}
-
-const useWeightSessions = () => {
-  const sessionsQ = useQuery({
-    queryKey: ["sessions", "weight"],
-    queryFn: () => listSessions("weight"),
-    retry: false,
-  });
-
-  const weightsQ = useQuery({
-    queryKey: ["weight-details", sessionsQ.data?.map((s) => s.id).join(",") ?? ""],
-    queryFn: async () => {
-      const sessions = sessionsQ.data ?? [];
-      const entries = await Promise.all(
-        sessions.map(async (session) => {
-          try {
-            const weight = await getWeightDetails(session.id);
-            return { session: { id: session.id, startedAt: session.startedAt }, weight };
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return entries.filter((e): e is WeightedSessionEntry => e !== null);
-    },
-    enabled: sessionsQ.data !== undefined && sessionsQ.data.length > 0,
-    retry: false,
-  });
-
-  return weightsQ.data ?? [];
-};
+import { checkAuth } from "@/lib/api";
 
 function useResumeToken() {
   const qc = useQueryClient();
@@ -100,7 +66,7 @@ function useResumeToken() {
 
 export default function App() {
   useResumeToken();
-  const chartSessions = useWeightSessions();
+  const [activeTab, setActiveTab] = useState<"dashboard" | "graphs">("dashboard");
 
   const authQ = useQuery({
     queryKey: ["auth", "status"],
@@ -143,6 +109,8 @@ export default function App() {
     );
   }
 
+  const tabs: Array<"dashboard" | "graphs"> = ["dashboard", "graphs"];
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <header className="flex items-center justify-between">
@@ -152,21 +120,59 @@ export default function App() {
         </Button>
       </header>
 
-      <ExerciseInput />
+      <div className="flex gap-1 border-b pb-2">
+        {tabs.map((tab) => (
+          <Button
+            key={tab}
+            variant={activeTab === tab ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveTab(tab)}
+            className="capitalize"
+          >
+            {tab}
+          </Button>
+        ))}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Weight over time</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <WeightOverTimeChart sessions={chartSessions} />
-        </CardContent>
-      </Card>
+      {activeTab === "dashboard" ? (
+        <>
+          <ExerciseInput />
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Recent sessions</h2>
-        <SessionList />
-      </section>
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Recent sessions</h2>
+            <SessionList />
+          </section>
+        </>
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Running pace</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RunningPaceChart />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Running distance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RunningDistanceChart />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Training heatmap</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CalendarHeatmap />
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

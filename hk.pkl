@@ -30,6 +30,10 @@ local all_steps = new Mapping<String, Step> {
     glob = "frontend/src/**/*.{ts,tsx}"
     check = "pnpm --dir frontend exec tsc -b"
   }
+  ["frontend-build"] {
+    glob = "frontend/src/**/*.{ts,tsx}"
+    check = "pnpm --dir frontend build"
+  }
 }
 
 local pre_commit_steps = new Mapping<String, Step> {

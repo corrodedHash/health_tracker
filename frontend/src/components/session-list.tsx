@@ -64,6 +64,7 @@ function SessionRow({ session }: { session: ExerciseSession }) {
             {(runningQ.data.distanceM / 1000).toFixed(2)} km ·{" "}
             <span className="text-muted-foreground">Pace:</span>{" "}
             {formatPace(runningQ.data.distanceM, session.durationMs)}
+
             {runningQ.data.movingDistanceM != null && (
               <div className="text-xs text-muted-foreground">
                 Moving: {(runningQ.data.movingDistanceM / 1000).toFixed(2)} km

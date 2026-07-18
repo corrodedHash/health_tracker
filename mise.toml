@@ -84,6 +84,8 @@ run = "cargo run -p health-bot --"
 
 [tasks.test]
 description = "Run the test suite"
+depends = ["ensure-debug-database"]
+env = { DATABASE_URL = "postgres://health:health@localhost:5432/health" }
 run = "cargo test --all-features"
 
 [tasks.frontend-install]
