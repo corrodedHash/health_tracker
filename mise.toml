@@ -61,4 +61,3 @@ run = "pnpm --dir frontend build"
 [tasks.frontend-lint]
 description = "Lint the frontend"
 run = "pnpm --dir frontend lint"
-
