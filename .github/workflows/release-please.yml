@@ -1,24 +1,43 @@
-name: Release
+name: release-please
 
-# Cut a release by pushing a version tag, e.g.:
-#   git tag v0.2.0 && git push origin v0.2.0
-# This builds the binaries for each target and publishes a GitHub Release
-# whose notes are generated from the commit history by git-cliff.
 on:
   push:
-    tags: ["v*"]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust is needed by release-please so it can update Cargo.lock after
+      # bumping the workspace version in Cargo.toml.
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+
+      - uses: googleapis/release-please-action@v4
+        id: release
 
   build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     name: build ${{ matrix.target }}
-    needs: ci
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +50,7 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,8 +58,6 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      # rust-toolchain.toml is the single source of truth for the version;
-      # we only add the cross-compilation target on top.
       - name: Install Rust toolchain
         run: |
           rustup toolchain install
@@ -56,7 +74,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          staging="health_tracker-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          staging="health_tracker-${{ needs.release-please.outputs.tag_name }}-${{ matrix.target }}"
           mkdir "$staging"
           bin_dir="target/${{ matrix.target }}/release"
           for bin in health-web health-bot; do
@@ -71,38 +89,18 @@ jobs:
           name: ${{ matrix.target }}
           path: "*.tar.gz"
 
-  release:
-    name: publish release
-    needs: build
+  upload:
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      # Full history + tags so git-cliff can compute the changelog range.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - name: Generate release notes
-        uses: orhun/git-cliff-action@v4
-        id: cliff
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        env:
-          OUTPUT: RELEASE_NOTES.md
-
-      - name: Publish GitHub release
+      - name: Upload assets to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --notes-file RELEASE_NOTES.md \
-            dist/*.tar.gz
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/*.tar.gz
