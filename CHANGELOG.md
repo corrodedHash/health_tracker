@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.2.0...health-tracker-v0.2.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* cargo lock file ([#29](https://github.com/corrodedHash/health_tracker/issues/29)) ([2b2d25d](https://github.com/corrodedHash/health_tracker/commit/2b2d25de4eac68430b8f002cf953856fc66058c5))
+* remove cargo-workspace plugin (conflicts with Rust strategy's native workspace handling) ([#28](https://github.com/corrodedHash/health_tracker/issues/28)) ([51d9dac](https://github.com/corrodedHash/health_tracker/commit/51d9dac226c17f5f1e1be3684902468678b29f06))
+
 ## [0.2.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.1.0...health-tracker-v0.2.0) (2026-07-18)
 
 
