@@ -4,8 +4,6 @@
 # Run `mise tasks` to list, `mise run <task>` to execute.
 
 [tools]
-# Used by the `changelog` task and mirrored by the release workflow.
-git-cliff = { version = "2.13.1", repository = "https://github.com/orhun/git-cliff" }
 pnpm = "11"
 # Git hook manager — runs repo-integrity checks and linters.
 hk = "1"
@@ -120,18 +118,5 @@ docker run -d --name ht-postgres \
 description = "Stop the PostgreSQL container"
 run = "docker rm -f ht-postgres 2>/dev/null || true"
 
-[tasks.changelog]
-description = "Preview the bumped version and notes for the pending (unreleased) commits"
-run = """
-echo "=== Next version ==="
-git cliff --bumped-version
-echo
-echo "=== Changelog ==="
-git cliff --unreleased
-"""
-
-# Cut a release: bump version from commits, sync Cargo.toml, commit, tag, push.
-# The logic lives in tools/release-tag.sh; see there for details.
-[tasks.tag]
-description = "Bump version from commits, then tag + push to trigger a release"
-run = "./tools/release-tag.sh"
+# Releases are automated via release-please (Google) — see the
+# release-please.yml workflow and release-please-config.json at the root.

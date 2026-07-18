@@ -34,6 +34,21 @@ Workflow after any schema change:
 Run `mise tasks` to see all available tasks. Using `mise run <task>` ensures
 the correct tool versions and environment are set up automatically.
 
+## Releases (release-please)
+
+Releases are fully automated via [release-please](https://github.com/googleapis/release-please).
+
+**How to cut a release:**
+1. Merge conventional commits (`feat:`, `fix:`, etc.) to `main`
+2. release-please creates/updates a **Release PR** (version bump + changelog)
+3. Merge the Release PR → release-please tags the release and creates a GitHub
+   Release; CI builds binaries and uploads them as release assets
+
+**Config files:**
+- `release-please-config.json` — release-please configuration
+- `.release-please-manifest.json` — current version manifest
+- `.github/workflows/release-please.yml` — the CI workflow
+
 ## Verification via hk
 
 **Always use `hk check` to verify any code change.** It only checks the
