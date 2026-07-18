@@ -3,7 +3,6 @@
   "release-type": "rust",
   "include-v-in-tag": true,
   "bump-minor-pre-major": true,
-  "plugins": ["cargo-workspace"],
   "packages": {
     ".": {
       "release-type": "rust",
