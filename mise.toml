@@ -61,21 +61,3 @@ run = "pnpm --dir frontend build"
 [tasks.frontend-lint]
 description = "Lint the frontend"
 run = "pnpm --dir frontend lint"
-
-[tasks.db-up]
-description = "Start a PostgreSQL container for local development"
-run = """
-docker rm -f ht-postgres 2>/dev/null || true
-docker run -d --name ht-postgres \
-  -e POSTGRES_USER=health \
-  -e POSTGRES_PASSWORD=health \
-  -e POSTGRES_DB=health \
-  -p 5432:5432 postgres:16
-"""
-
-[tasks.db-down]
-description = "Stop the PostgreSQL container"
-run = "docker rm -f ht-postgres 2>/dev/null || true"
-
-# Releases are automated via release-please (Google) — see the
-# release-please.yml workflow and release-please-config.json at the root.
