@@ -273,7 +273,7 @@ pub enum ValidationError {
     NegativeOffset(i32),
     #[error("distance_m must be non-negative (got {0})")]
     NegativeDistance(f64),
-    #[error("quality must be in 1..=10 (got {0})")]
+    #[error("quality must be in 1..=5 (got {0})")]
     QualityOutOfRange(i32),
 }
 
@@ -287,7 +287,7 @@ impl NewExerciseSession {
             return Err(ValidationError::NonPositiveDuration(self.duration));
         }
         if let Some(q) = self.quality
-            && !(1..=10).contains(&q)
+            && !(1..=5).contains(&q)
         {
             return Err(ValidationError::QualityOutOfRange(q));
         }
@@ -308,7 +308,7 @@ impl WeightSession {
             return Err(ValidationError::NonPositiveSets(self.sets));
         }
         if let Some(q) = self.quality
-            && !(1..=10).contains(&q)
+            && !(1..=5).contains(&q)
         {
             return Err(ValidationError::QualityOutOfRange(q));
         }
@@ -324,7 +324,7 @@ impl CoreSession {
     /// Returns [`ValidationError::QualityOutOfRange`] when present and outside 1..=10.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if let Some(q) = self.quality
-            && !(1..=10).contains(&q)
+            && !(1..=5).contains(&q)
         {
             return Err(ValidationError::QualityOutOfRange(q));
         }
@@ -343,7 +343,7 @@ impl RunningSession {
             return Err(ValidationError::NegativeDistance(self.distance_m));
         }
         if let Some(q) = self.quality
-            && !(1..=10).contains(&q)
+            && !(1..=5).contains(&q)
         {
             return Err(ValidationError::QualityOutOfRange(q));
         }
@@ -442,9 +442,9 @@ mod tests {
             session_id: Uuid::nil(),
             weight_kg: 60.0,
             sets: 3,
-            quality: Some(11),
+            quality: Some(6),
         };
-        assert_eq!(bad.validate(), Err(ValidationError::QualityOutOfRange(11)));
+        assert_eq!(bad.validate(), Err(ValidationError::QualityOutOfRange(6)));
     }
 
     #[test]

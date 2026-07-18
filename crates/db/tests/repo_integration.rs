@@ -154,13 +154,13 @@ async fn weight_insert_and_get(pool: PgPool) {
         session_id: s.id,
         weight_kg: 80.0,
         sets: 3,
-        quality: Some(8),
+        quality: Some(4),
     };
     WeightRepository::insert(&r, s.id, &row).await.unwrap();
     let back = WeightRepository::get_by_session(&r, s.id).await.unwrap();
     assert!((back.weight_kg - 80.0).abs() < f64::EPSILON);
     assert_eq!(back.sets, 3);
-    assert_eq!(back.quality, Some(8));
+    assert_eq!(back.quality, Some(4));
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -195,11 +195,11 @@ async fn core_insert_and_get(pool: PgPool) {
 
     let row = CoreSession {
         session_id: s.id,
-        quality: Some(7),
+        quality: Some(3),
     };
     CoreRepository::insert(&r, s.id, &row).await.unwrap();
     let back = CoreRepository::get_by_session(&r, s.id).await.unwrap();
-    assert_eq!(back.quality, Some(7));
+    assert_eq!(back.quality, Some(3));
 }
 
 // ---------------------------------------------------------------------------

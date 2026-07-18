@@ -33,3 +33,13 @@ Workflow after any schema change:
 
 Run `mise tasks` to see all available tasks. Using `mise run <task>` ensures
 the correct tool versions and environment are set up automatically.
+
+## Verification via hk
+
+**Always use `hk check` to verify any code change.** It only checks the
+files you modified (no full-project rebuild), and runs cargo fmt/clippy/test,
+frontend lint/typecheck/build, and migration checks. Pre-commit hooks also
+run most of these automatically (migration checks, cargo fmt, cargo clippy,
+frontend lint, frontend typecheck). If `hk check` passes, the code is
+correct. Do not look for or run individual mise tasks — `hk check` is the
+single authoritative command.

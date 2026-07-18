@@ -19,7 +19,7 @@ export function ExerciseInput() {
   const [kind, setKind] = useState<ExerciseKind>("weight");
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [durationMin, setDurationMin] = useState("30");
-  const [quality, setQuality] = useState("");
+  const [quality, setQuality] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
 
   const [weightKg, setWeightKg] = useState("12");
@@ -40,23 +40,23 @@ export function ExerciseInput() {
         startedAt: new Date(startedAt),
         durationMs,
         notes: notes.trim() || null,
-        quality: quality.trim() ? Number(quality) : null,
+        quality,
       });
 
       if (kind === "weight") {
         await createWeightDetails(session.id, {
           weight_kg: Number(weightKg) || 12,
           sets: Number(sets) || 3,
-          quality: quality.trim() ? Number(quality) : null,
+          quality,
         });
       } else if (kind === "core") {
         await createCoreDetails(session.id, {
-          quality: quality.trim() ? Number(quality) : null,
+          quality,
         });
       } else if (kind === "running") {
         await createRunningDetails(session.id, {
           distance_m: Number(distanceM),
-          quality: quality.trim() ? Number(quality) : null,
+          quality,
         });
       }
 
@@ -133,16 +133,21 @@ export function ExerciseInput() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="quality">Quality (1–10, optional)</Label>
-            <Input
-              id="quality"
-              type="number"
-              min="1"
-              max="10"
-              value={quality}
-              placeholder="optional"
-              onChange={(e) => setQuality(e.target.value)}
-            />
+            <Label>Quality (1–5, optional)</Label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  variant={quality === n ? "default" : "outline"}
+                  size="sm"
+                  className="w-10"
+                  onClick={() => setQuality(quality === n ? null : n)}
+                >
+                  {n}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-2">
