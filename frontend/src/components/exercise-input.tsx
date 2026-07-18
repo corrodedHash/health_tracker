@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Stopwatch } from "@/components/stopwatch";
 import {
   createCoreDetails,
   createRunningDetails,
@@ -130,6 +131,20 @@ export function ExerciseInput() {
                 onChange={(e) => setDurationMin(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label>Stopwatch</Label>
+            <Stopwatch
+              onStop={(start, durationMs) => {
+                setStartedAt(
+                  new Date(start.getTime() - start.getTimezoneOffset() * 60000)
+                    .toISOString()
+                    .slice(0, 16),
+                );
+                setDurationMin(String((durationMs / 60000).toFixed(1)));
+              }}
+            />
           </div>
 
           <div className="space-y-2">
