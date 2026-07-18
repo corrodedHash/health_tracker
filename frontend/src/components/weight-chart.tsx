@@ -12,7 +12,7 @@ export function WeightOverTimeChart({ sessions }: WeightOverTimeChartProps) {
       (a, b) => a.session.startedAt.getTime() - b.session.startedAt.getTime(),
     );
     const dates = sorted.map((s) => s.session.startedAt.toLocaleDateString());
-    const weights = sorted.map((s) => s.weight.weight_kg);
+    const weights = sorted.map((s) => s.weight.weight_g / 1000);
     return {
       tooltip: { trigger: "axis" },
       xAxis: { type: "category", data: dates, axisLabel: { rotate: 30 } },

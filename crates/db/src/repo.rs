@@ -278,18 +278,16 @@ impl TryFrom<SessionRow> for ExerciseSession {
 #[derive(sqlx::FromRow)]
 struct WeightRow {
     session_id: Uuid,
-    weight_kg: f64,
+    weight_g: i32,
     sets: i32,
-    quality: Option<i32>,
 }
 
 impl From<WeightRow> for WeightSession {
     fn from(r: WeightRow) -> Self {
         Self {
             session_id: r.session_id,
-            weight_kg: r.weight_kg,
+            weight_g: r.weight_g,
             sets: r.sets,
-            quality: r.quality,
         }
     }
 }
@@ -297,14 +295,12 @@ impl From<WeightRow> for WeightSession {
 #[derive(sqlx::FromRow)]
 struct CoreRow {
     session_id: Uuid,
-    quality: Option<i32>,
 }
 
 impl From<CoreRow> for CoreSession {
     fn from(r: CoreRow) -> Self {
         Self {
             session_id: r.session_id,
-            quality: r.quality,
         }
     }
 }
@@ -312,9 +308,8 @@ impl From<CoreRow> for CoreSession {
 #[derive(sqlx::FromRow)]
 struct RunningRow {
     session_id: Uuid,
-    distance_m: f64,
-    quality: Option<i32>,
-    moving_distance_m: Option<f64>,
+    distance_m: i32,
+    moving_distance_m: Option<i32>,
     moving_time: Option<f64>,
     gpx_data: Option<Vec<u8>>,
 }
@@ -324,7 +319,6 @@ impl From<RunningRow> for RunningSession {
         Self {
             session_id: r.session_id,
             distance_m: r.distance_m,
-            quality: r.quality,
             moving_distance_m: r.moving_distance_m,
             moving_time: r.moving_time,
             gpx_data: r.gpx_data,
@@ -559,12 +553,11 @@ impl WeightRepository for SqlxRepository {
         enforce_kind(&mut tx, session_id, ExerciseKind::Weight).await?;
         sqlx::query!(
             "INSERT INTO exercise_weight \
-             (session_id, weight_kg, sets, quality) \
-             VALUES ($1, $2, $3, $4)",
+              (session_id, weight_g, sets) \
+              VALUES ($1, $2, $3)",
             session_id,
-            row.weight_kg,
-            row.sets,
-            row.quality
+            row.weight_g,
+            row.sets
         )
         .execute(&mut *tx)
         .await
@@ -576,8 +569,8 @@ impl WeightRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<WeightSession, DbError> {
         let row = sqlx::query_as!(
             WeightRow,
-            "SELECT session_id, weight_kg, sets, quality \
-             FROM exercise_weight WHERE session_id = $1",
+            "SELECT session_id, weight_g, sets \
+              FROM exercise_weight WHERE session_id = $1",
             session_id
         )
         .fetch_one(&self.pool)
@@ -596,15 +589,14 @@ impl WeightRepository for SqlxRepository {
 
 #[async_trait::async_trait]
 impl CoreRepository for SqlxRepository {
-    async fn insert(&self, session_id: Uuid, row: &CoreSession) -> Result<(), DbError> {
+    async fn insert(&self, session_id: Uuid, _row: &CoreSession) -> Result<(), DbError> {
         let mut tx = self.pool.begin().await?;
         enforce_kind(&mut tx, session_id, ExerciseKind::Core).await?;
         sqlx::query!(
             "INSERT INTO exercise_core \
-             (session_id, quality) \
-             VALUES ($1, $2)",
-            session_id,
-            row.quality
+              (session_id) \
+              VALUES ($1)",
+            session_id
         )
         .execute(&mut *tx)
         .await
@@ -616,8 +608,8 @@ impl CoreRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError> {
         let row = sqlx::query_as!(
             CoreRow,
-            "SELECT session_id, quality \
-             FROM exercise_core WHERE session_id = $1",
+            "SELECT session_id \
+              FROM exercise_core WHERE session_id = $1",
             session_id
         )
         .fetch_one(&self.pool)
@@ -640,11 +632,10 @@ impl RunningRepository for SqlxRepository {
         let mut tx = self.pool.begin().await?;
         enforce_kind(&mut tx, session_id, ExerciseKind::Running).await?;
         sqlx::query!(
-            "INSERT INTO exercise_running (session_id, distance_m, quality, moving_distance_m, moving_time, gpx_data) \
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO exercise_running (session_id, distance_m, moving_distance_m, moving_time, gpx_data) \
+              VALUES ($1, $2, $3, $4, $5)",
             session_id,
             row.distance_m,
-            row.quality,
             row.moving_distance_m,
             row.moving_time,
             row.gpx_data.as_deref()
@@ -659,8 +650,8 @@ impl RunningRepository for SqlxRepository {
     async fn get_by_session(&self, session_id: Uuid) -> Result<RunningSession, DbError> {
         let row = sqlx::query_as!(
             RunningRow,
-            "SELECT session_id, distance_m, quality, moving_distance_m, moving_time, NULL::bytea AS gpx_data \
-             FROM exercise_running WHERE session_id = $1",
+            "SELECT session_id, distance_m, moving_distance_m, moving_time, NULL::bytea AS gpx_data \
+              FROM exercise_running WHERE session_id = $1",
             session_id
         )
         .fetch_one(&self.pool)

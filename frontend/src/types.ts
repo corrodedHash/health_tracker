@@ -21,36 +21,31 @@ export interface NewExerciseSession {
 
 export interface WeightSession {
   session_id: string;
-  weight_kg: number;
+  weight_g: number;
   sets: number;
-  quality: number | null;
 }
 
 export interface CoreSession {
   session_id: string;
-  quality: number | null;
 }
 
 export interface RunningSummary {
   sessionId: string;
   distanceM: number;
-  quality: number | null;
   movingDistanceM: number | null;
   movingTime: number | null;
   hasGpx: boolean;
 }
 
 export interface WeightCreate {
-  weight_kg?: number;
-  sets?: number;
-  quality: number | null;
+  weight_g: number;
+  sets: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CoreCreate {
-  quality: number | null;
 }
 
 export interface RunningCreate {
   distance_m: number;
-  quality: number | null;
 }

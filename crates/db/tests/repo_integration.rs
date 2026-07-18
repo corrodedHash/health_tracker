@@ -152,15 +152,13 @@ async fn weight_insert_and_get(pool: PgPool) {
 
     let row = WeightSession {
         session_id: s.id,
-        weight_kg: 80.0,
+        weight_g: 80_000,
         sets: 3,
-        quality: Some(8),
     };
     WeightRepository::insert(&r, s.id, &row).await.unwrap();
     let back = WeightRepository::get_by_session(&r, s.id).await.unwrap();
-    assert!((back.weight_kg - 80.0).abs() < f64::EPSILON);
+    assert_eq!(back.weight_g, 80_000);
     assert_eq!(back.sets, 3);
-    assert_eq!(back.quality, Some(8));
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -173,9 +171,8 @@ async fn weight_insert_kind_mismatch(pool: PgPool) {
 
     let row = WeightSession {
         session_id: s.id,
-        weight_kg: 80.0,
+        weight_g: 80_000,
         sets: 3,
-        quality: None,
     };
     let err = WeightRepository::insert(&r, s.id, &row).await.unwrap_err();
     assert!(matches!(err, DbError::KindMismatch { .. }));
@@ -193,13 +190,10 @@ async fn core_insert_and_get(pool: PgPool) {
         .await
         .unwrap();
 
-    let row = CoreSession {
-        session_id: s.id,
-        quality: Some(7),
-    };
+    let row = CoreSession { session_id: s.id };
     CoreRepository::insert(&r, s.id, &row).await.unwrap();
     let back = CoreRepository::get_by_session(&r, s.id).await.unwrap();
-    assert_eq!(back.quality, Some(7));
+    assert_eq!(back.session_id, s.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,16 +211,15 @@ async fn running_insert_get_and_gpx_blob(pool: PgPool) {
     let blob = b"<gpx></gpx>".to_vec();
     let row = RunningSession {
         session_id: s.id,
-        distance_m: 5_000.0,
-        quality: None,
-        moving_distance_m: Some(4_800.0),
+        distance_m: 5_000,
+        moving_distance_m: Some(4_800),
         moving_time: Some(1800.0),
         gpx_data: Some(blob.clone()),
     };
     RunningRepository::insert(&r, s.id, &row).await.unwrap();
 
     let back = RunningRepository::get_by_session(&r, s.id).await.unwrap();
-    assert!((back.distance_m - 5_000.0).abs() < f64::EPSILON);
+    assert_eq!(back.distance_m, 5_000);
     assert!(back.gpx_data.is_none());
 
     let gpx = RunningRepository::get_gpx(&r, s.id).await.unwrap();
@@ -237,8 +230,7 @@ async fn running_insert_get_and_gpx_blob(pool: PgPool) {
         .unwrap();
     let row2 = RunningSession {
         session_id: s2.id,
-        distance_m: 100.0,
-        quality: None,
+        distance_m: 100,
         moving_distance_m: None,
         moving_time: None,
         gpx_data: None,

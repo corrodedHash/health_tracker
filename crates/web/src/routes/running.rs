@@ -12,8 +12,7 @@ use crate::state::AppState;
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct NewRunningPayload {
-    pub distance_m: f64,
-    pub quality: Option<i32>,
+    pub distance_m: i32,
 }
 
 #[utoipa::path(
@@ -36,7 +35,6 @@ pub async fn create(
     let running = RunningSession {
         session_id,
         distance_m: body.distance_m,
-        quality: body.quality,
         moving_distance_m: None,
         moving_time: None,
         gpx_data: None,

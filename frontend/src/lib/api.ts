@@ -25,15 +25,13 @@ export interface SessionDto {
 
 export interface WeightSessionDto {
   session_id: string;
-  weight_kg: number;
+  weight_g: number;
   sets: number;
-  quality: number | null;
 }
 
 export interface RunningSessionDto {
   session_id: string;
   distance_m: number;
-  quality: number | null;
   moving_distance_m: number | null;
   moving_time: number | null;
   has_gpx: boolean;
@@ -126,7 +124,6 @@ export async function getRunningSummary(
   return {
     sessionId: resp.data.session_id,
     distanceM: resp.data.distance_m,
-    quality: resp.data.quality,
     movingDistanceM: resp.data.moving_distance_m,
     movingTime: resp.data.moving_time,
     hasGpx: resp.data.has_gpx,

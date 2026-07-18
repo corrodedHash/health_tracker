@@ -11,9 +11,7 @@ use crate::middleware::session::UserId;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct NewCorePayload {
-    pub quality: Option<i32>,
-}
+pub struct NewCorePayload {}
 
 #[utoipa::path(
     post,
@@ -30,12 +28,9 @@ pub async fn create(
     State(state): State<AppState>,
     UserId(_user_id): UserId,
     Path(session_id): Path<Uuid>,
-    Json(body): Json<NewCorePayload>,
+    Json(_body): Json<NewCorePayload>,
 ) -> Result<Json<serde_json::Value>, WebError> {
-    let core = CoreSession {
-        session_id,
-        quality: body.quality,
-    };
+    let core = CoreSession { session_id };
     core.validate()
         .map_err(|e| WebError::BadRequest(e.to_string()))?;
     let repo = SqlxRepository::new(state.pool.clone());
