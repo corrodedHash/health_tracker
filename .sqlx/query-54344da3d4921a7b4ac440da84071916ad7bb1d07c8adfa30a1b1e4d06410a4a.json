@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT session_id, quality FROM exercise_core WHERE session_id = $1",
+  "query": "SELECT session_id, weight_g, sets FROM exercise_weight WHERE session_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,12 @@
       },
       {
         "ordinal": 1,
-        "name": "quality",
+        "name": "weight_g",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "sets",
         "type_info": "Int4"
       }
     ],
@@ -21,8 +26,9 @@
     },
     "nullable": [
       false,
-      true
+      false,
+      false
     ]
   },
-  "hash": "0ce7d8e951e3c385068b9a452e84911378c870c00b263f2868e25a24bf8fc7e4"
+  "hash": "54344da3d4921a7b4ac440da84071916ad7bb1d07c8adfa30a1b1e4d06410a4a"
 }

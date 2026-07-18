@@ -46,18 +46,14 @@ export function ExerciseInput() {
 
       if (kind === "weight") {
         await createWeightDetails(session.id, {
-          weight_kg: Number(weightKg) || 12,
+          weight_g: (Number(weightKg) || 12) * 1000,
           sets: Number(sets) || 3,
-          quality,
         });
       } else if (kind === "core") {
-        await createCoreDetails(session.id, {
-          quality,
-        });
+        await createCoreDetails(session.id, {});
       } else if (kind === "running") {
         await createRunningDetails(session.id, {
           distance_m: Number(distanceM),
-          quality,
         });
       }
 

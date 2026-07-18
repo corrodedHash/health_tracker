@@ -23,6 +23,7 @@ use crate::state::AppState;
     ),
     tag = "runs",
 )]
+#[allow(clippy::cast_possible_truncation)]
 pub async fn upload_gpx(
     State(state): State<AppState>,
     UserId(user_id): UserId,
@@ -43,9 +44,8 @@ pub async fn upload_gpx(
 
     let running = RunningSession {
         session_id: session.id,
-        distance_m: total_distance,
-        quality: None,
-        moving_distance_m: Some(moving_distance),
+        distance_m: total_distance as i32,
+        moving_distance_m: Some(moving_distance as i32),
         moving_time: Some(moving_duration.as_secs_f64()),
         gpx_data: Some(body.to_vec()),
     };

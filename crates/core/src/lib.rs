@@ -90,6 +90,10 @@ pub struct UnknownExerciseKind(pub String);
 // Parent: ExerciseSession
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Parent: ExerciseSession
+// ---------------------------------------------------------------------------
+
 /// One row of the `exercises` parent table — the cross-cutting
 /// representation of any workout, regardless of type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -132,39 +136,27 @@ pub struct NewExerciseSession {
 // ---------------------------------------------------------------------------
 
 /// `exercise_weight` row.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] // no Eq: f64 fields
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeightSession {
     pub session_id: Uuid,
-    #[serde(default = "default_weight_kg")]
-    pub weight_kg: f64,
-    #[serde(default = "default_sets")]
+    pub weight_g: i32,
     pub sets: i32,
-    pub quality: Option<i32>,
-}
-
-const fn default_weight_kg() -> f64 {
-    12.0
-}
-const fn default_sets() -> i32 {
-    3
 }
 
 /// `exercise_core` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CoreSession {
     pub session_id: Uuid,
-    pub quality: Option<i32>,
 }
 
 /// `exercise_running` row. `gpx_data` is the raw bytes of the GPX file
-/// (stored as `BYTEA` per `DESIGN.md`). No `Eq` because `distance_m` is f64.
+/// (stored as `BYTEA` per `DESIGN.md`). No `Eq` because `moving_time` is `f64`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunningSession {
     pub session_id: Uuid,
-    pub distance_m: f64,
-    pub quality: Option<i32>,
+    pub distance_m: i32,
     /// Moving distance computed from GPX (intervals where speed > threshold).
-    pub moving_distance_m: Option<f64>,
+    pub moving_distance_m: Option<i32>,
     /// Moving time in seconds, computed from GPX.
     pub moving_time: Option<f64>,
     /// Raw GPX blob — present only when the upload came via the bot or an
@@ -259,12 +251,12 @@ pub struct NewOidcState {
 // ---------------------------------------------------------------------------
 
 /// Errors that [`Session::validate`] and friends can produce.
-#[derive(Debug, Clone, PartialEq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ValidationError {
     #[error("duration must be positive (got {0:?})")]
     NonPositiveDuration(std::time::Duration),
-    #[error("weight_kg must be positive (got {0})")]
-    NonPositiveWeight(f64),
+    #[error("weight_g must be positive (got {0})")]
+    NonPositiveWeight(i32),
     #[error("sets must be positive (got {0})")]
     NonPositiveSets(i32),
     #[error("bpm must be in 30..=220 (got {0})")]
@@ -272,7 +264,7 @@ pub enum ValidationError {
     #[error("offset_secs must be non-negative (got {0})")]
     NegativeOffset(i32),
     #[error("distance_m must be non-negative (got {0})")]
-    NegativeDistance(f64),
+    NegativeDistance(i32),
     #[error("quality must be in 1..=5 (got {0})")]
     QualityOutOfRange(i32),
 }
@@ -300,34 +292,23 @@ impl WeightSession {
     ///
     /// # Errors
     /// See [`ValidationError`] variants.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.weight_kg <= 0.0 {
-            return Err(ValidationError::NonPositiveWeight(self.weight_kg));
+    pub const fn validate(&self) -> Result<(), ValidationError> {
+        if self.weight_g <= 0 {
+            return Err(ValidationError::NonPositiveWeight(self.weight_g));
         }
         if self.sets <= 0 {
             return Err(ValidationError::NonPositiveSets(self.sets));
-        }
-        if let Some(q) = self.quality
-            && !(1..=5).contains(&q)
-        {
-            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
 }
 
 impl CoreSession {
-    /// `exercise_core` only has a `quality` column to check beyond the
-    /// duration already validated on the parent.
+    /// No extra per-column constraints beyond the parent `exercises` row.
     ///
     /// # Errors
-    /// Returns [`ValidationError::QualityOutOfRange`] when present and outside 1..=10.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if let Some(q) = self.quality
-            && !(1..=5).contains(&q)
-        {
-            return Err(ValidationError::QualityOutOfRange(q));
-        }
+    /// Always returns `Ok`.
+    pub const fn validate(&self) -> Result<(), ValidationError> {
         Ok(())
     }
 }
@@ -338,14 +319,9 @@ impl RunningSession {
     ///
     /// # Errors
     /// Returns [`ValidationError::NegativeDistance`] on negative input.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.distance_m < 0.0 {
+    pub const fn validate(&self) -> Result<(), ValidationError> {
+        if self.distance_m < 0 {
             return Err(ValidationError::NegativeDistance(self.distance_m));
-        }
-        if let Some(q) = self.quality
-            && !(1..=5).contains(&q)
-        {
-            return Err(ValidationError::QualityOutOfRange(q));
         }
         Ok(())
     }
@@ -423,28 +399,13 @@ mod tests {
     }
 
     #[test]
-    fn weight_validation_catches_negatives() {
+    fn weight_validation_catches_non_positive() {
         let bad = WeightSession {
             session_id: Uuid::nil(),
-            weight_kg: -5.0,
+            weight_g: 0,
             sets: 3,
-            quality: None,
         };
-        assert_eq!(
-            bad.validate(),
-            Err(ValidationError::NonPositiveWeight(-5.0))
-        );
-    }
-
-    #[test]
-    fn weight_quality_out_of_range() {
-        let bad = WeightSession {
-            session_id: Uuid::nil(),
-            weight_kg: 60.0,
-            sets: 3,
-            quality: Some(6),
-        };
-        assert_eq!(bad.validate(), Err(ValidationError::QualityOutOfRange(6)));
+        assert_eq!(bad.validate(), Err(ValidationError::NonPositiveWeight(0)));
     }
 
     #[test]
