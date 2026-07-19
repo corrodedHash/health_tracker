@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.2.1...health-tracker-v0.3.0) (2026-07-19)
+
+
+### Features
+
+* build and upload frontend artifact in release workflow ([#33](https://github.com/corrodedHash/health_tracker/issues/33)) ([75f3dcb](https://github.com/corrodedHash/health_tracker/commit/75f3dcb3bcb979814f1804fd53de3ad30d5fc40b))
+
+
+### Bug Fixes
+
+* pass --repo flag to gh release upload to fix upload job ([#31](https://github.com/corrodedHash/health_tracker/issues/31)) ([1ade56f](https://github.com/corrodedHash/health_tracker/commit/1ade56fbf0264673380be5e5bbf8348611dd74a5))
+
 ## [0.2.1](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.2.0...health-tracker-v0.2.1) (2026-07-18)
 
 
