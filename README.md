@@ -4,8 +4,7 @@ A Rust workspace for tracking workouts (weight, core, running) with a
 Vite + React frontend and a Matrix bot for GPX ingest. Backed by Postgres
 via SQLx with class-table inheritance for the exercise hierarchy.
 
-See [`DESIGN.md`](DESIGN.md) for the architecture and
-[`MIGRATION.md`](MIGRATION.md) for the bootstrap checkpoint.
+See [`docs/base.md`](docs/base.md) for the architecture and design decisions.
 
 ## Layout
 
@@ -33,8 +32,7 @@ health_tracker/
 - Postgres 13+ (the migrations use `gen_random_uuid()`, `INTERVAL`,
   `BYTEA`, `TIMESTAMPTZ`).
 - Docker — unit tests for `crates/db` run against a Postgres testcontainer
-  via `#[sqlx::test]`. SQLite is intentionally not supported; see
-  `MIGRATION.md` §"Test strategy decision".
+  via `#[sqlx::test]`. SQLite is intentionally not supported.
 - Node 20+ and pnpm for the frontend (the repo pins `pnpm` via `mise` and
   `package.json`'s `packageManager` field).
 
@@ -92,20 +90,6 @@ For the bot, the minimum set is:
 | `HEALTH_API__TOKEN`            | Bearer token for `POST /api/runs/gpx` |
 
 The `session.toml` file persisted by the bot is git-ignored.
-
-### Offline SQLx query cache (item 5.38)
-
-Once the `web` crate switches from runtime `query_as` to the `query!`
-macros, generate the offline cache with:
-
-```sh
-cargo sqlx prepare --workspace
-```
-
-The resulting `.sqlx/` directory is committed so `cargo check` works
-without a live database (`DATABASE_URL`) in CI. Until then the codebase
-ships with no offline cache and relies on `#[sqlx::test]` to validate
-queries at test time.
 
 ## Development
 
