@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.3.0...health-tracker-v0.3.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* build workspace members and drop non-linux targets in release workflow ([#35](https://github.com/corrodedHash/health_tracker/issues/35)) ([3f108dd](https://github.com/corrodedHash/health_tracker/commit/3f108ddbddb78403bf9e7f6d76e11fbc4bf2bdce))
+
 ## [0.3.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.2.1...health-tracker-v0.3.0) (2026-07-19)
 
 
