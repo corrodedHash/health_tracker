@@ -1340,7 +1340,7 @@ checksum = "a938f96298bab2f2315301ac84f6574c1f29a84d95956944cb4d380e6c0ff71e"
 
 [[package]]
 name = "health-auth"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1360,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "health-bot"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1386,7 +1386,7 @@ dependencies = [
 
 [[package]]
 name = "health-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "serde",
@@ -1399,7 +1399,7 @@ dependencies = [
 
 [[package]]
 name = "health-db"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1418,11 +1418,11 @@ dependencies = [
 
 [[package]]
 name = "health-tracker"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "health-web"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
