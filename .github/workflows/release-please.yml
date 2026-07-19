@@ -89,8 +89,43 @@ jobs:
           name: ${{ matrix.target }}
           path: "*.tar.gz"
 
+  frontend-build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (tsc + vite)
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Package
+        run: |
+          staging="health_tracker-${{ needs.release-please.outputs.tag_name }}-frontend"
+          cp -r frontend/dist "$staging"
+          tar czf "$staging.tar.gz" "$staging"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend
+          path: "*.tar.gz"
+
   upload:
-    needs: [release-please, build]
+    needs: [release-please, build, frontend-build]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
