@@ -35,6 +35,7 @@ struct ApiSection {
 fn load_config() -> anyhow::Result<BotConfig> {
     let config = config::Config::builder()
         .add_source(config::File::with_name("config/default").required(false))
+        .add_source(config::File::with_name("config/local").required(false))
         .add_source(config::Environment::with_prefix("HEALTH"))
         .build()?;
 
