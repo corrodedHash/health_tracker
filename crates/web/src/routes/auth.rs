@@ -24,7 +24,7 @@ pub struct LoginParams {
 
 #[utoipa::path(
     get,
-    path = "/auth/login",
+    path = "/api/auth/login",
     params(LoginParams),
     responses(
         (status = 302, description = "Redirect to OIDC provider or auto-login"),
@@ -93,7 +93,7 @@ pub async fn login(
 
 #[utoipa::path(
     get,
-    path = "/auth/callback",
+    path = "/api/auth/callback",
     params(CallbackParams),
     responses(
         (status = 200, description = "Login successful, sets session cookie"),
@@ -141,7 +141,7 @@ pub async fn callback(
 
 #[utoipa::path(
     post,
-    path = "/auth/logout",
+    path = "/api/auth/logout",
     responses(
         (status = 200, description = "Logged out, session cookie cleared"),
     ),
@@ -161,7 +161,7 @@ pub async fn logout(State(state): State<AppState>) -> Result<Response, WebError>
 
 #[utoipa::path(
     get,
-    path = "/auth/status",
+    path = "/api/auth/status",
     responses(
         (status = 200, description = "Authentication status",
             body = serde_json::Value),

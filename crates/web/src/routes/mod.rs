@@ -57,16 +57,18 @@ pub fn build_router(state: AppState) -> Router {
         .layer(bearer_layer);
 
     let auth_routes = Router::new()
-        .route("/login", routing::get(auth::login))
-        .route("/callback", routing::get(auth::callback))
-        .route("/logout", routing::post(auth::logout))
-        .route("/status", routing::get(auth::status));
+        .route("/auth/login", routing::get(auth::login))
+        .route("/auth/callback", routing::get(auth::callback))
+        .route("/auth/logout", routing::post(auth::logout))
+        .route("/auth/status", routing::get(auth::status));
 
-    let api_routes = openapi_route.merge(session_routes).merge(bearer_routes);
+    let api_routes = openapi_route
+        .merge(session_routes)
+        .merge(bearer_routes)
+        .merge(auth_routes);
 
     let mut app = Router::new()
         .nest("/api", api_routes)
-        .nest("/auth", auth_routes)
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     if let Some(static_dir) = &state.config.static_dir {
