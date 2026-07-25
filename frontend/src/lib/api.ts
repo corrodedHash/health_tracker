@@ -135,6 +135,6 @@ export async function deleteSession(sessionId: string): Promise<void> {
 }
 
 export async function checkAuth(): Promise<boolean> {
-  const resp = await axios.get<{ authenticated: boolean }>("/auth/status");
+  const resp = await axios.get<{ authenticated: boolean }>("/api/auth/status");
   return resp.data.authenticated;
 }

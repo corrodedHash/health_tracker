@@ -76,7 +76,7 @@ export default function App() {
   });
 
   const logout = useMutation({
-    mutationFn: () => axios.post("/auth/logout"),
+    mutationFn: () => axios.post("/api/auth/logout"),
     onSuccess: () => {
       authQ.refetch();
     },

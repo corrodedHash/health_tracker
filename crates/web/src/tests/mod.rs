@@ -160,7 +160,7 @@ async fn auth_login_errors_without_oidc_config() {
     let app = crate::routes::build_router(state);
 
     let req = Request::builder()
-        .uri("/auth/login")
+        .uri("/api/auth/login")
         .body(Body::empty())
         .unwrap();
 
@@ -174,7 +174,7 @@ async fn auth_logout_returns_200() {
     let app = crate::routes::build_router(state);
 
     let req = Request::builder()
-        .uri("/auth/logout")
+        .uri("/api/auth/logout")
         .method("POST")
         .body(Body::empty())
         .unwrap();
