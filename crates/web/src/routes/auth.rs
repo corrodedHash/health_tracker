@@ -131,10 +131,17 @@ pub async fn callback(
 
     repo.delete(&params.state).await?;
 
+    let redirect_to = state
+        .config
+        .frontend_url
+        .as_ref()
+        .map(|base| format!("{base}{}", result.resume_location))
+        .unwrap_or(result.resume_location);
+
     Ok((
-        StatusCode::OK,
+        StatusCode::FOUND,
         [(header::SET_COOKIE, cookie_str)],
-        Redirect::to(&result.resume_location),
+        Redirect::to(&redirect_to),
     )
         .into_response())
 }

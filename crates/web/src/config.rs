@@ -8,6 +8,7 @@ pub struct Config {
     pub listen_addr: String,
     pub static_dir: Option<String>,
     pub oidc: Option<OidcConfig>,
+    pub frontend_url: Option<String>,
     #[serde(default)]
     pub dev_auto_login: bool,
     #[serde(default = "default_cookie_secure")]

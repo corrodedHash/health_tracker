@@ -1,0 +1,24 @@
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+staticClients:
+  - id: health-tracker
+    redirectURIs:
+      - 'http://localhost:3000/auth/callback'
+    name: 'Health Tracker'
+    secret: dev-secret
+
+enablePasswordDB: true
+staticPasswords:
+  - email: admin@example.com
+    hash: "$2y$10$U34LAeRlaIY6Ja2l/xL.8.DVOkKMsAXxp0TN8DZy6kInikg9r16yy"
+    username: admin
+    userID: "08a8684b-db88-4d73-8107-5e1a5b5c3c4d"
+
+oauth2:
+  skipApprovalScreen: true

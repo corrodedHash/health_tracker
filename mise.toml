@@ -30,10 +30,20 @@ description = "Regenerate the sqlx offline query cache using a per-branch databa
 depends = ["ensure-debug-database"]
 run = "./tools/regenerate-sqlx.sh"
 
+[tasks.ensure-oidc]
+description = "Start a --rm Dex OIDC provider if one isn't already running on localhost:5556"
+run = "./tools/ensure-oidc.sh"
+
 [tasks.run-web]
 description = "Run the web server (pass args after --, per-branch database)"
 env = { HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__DEV_AUTO_LOGIN = "true" }
 run = "./tools/run-web.sh"
+
+[tasks.run-web-oidc]
+description = "Run the web server with a real OIDC provider (Dex in Docker) — pass args after --"
+depends = ["ensure-debug-database", "ensure-oidc"]
+env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__OIDC__ISSUER_URL = "http://localhost:5556/dex", HEALTH__OIDC__CLIENT_ID = "health-tracker", HEALTH__OIDC__CLIENT_SECRET = "dev-secret", HEALTH__OIDC__REDIRECT_URI = "http://localhost:3000/auth/callback", HEALTH__FRONTEND_URL = "http://localhost:5173" }
+run = "cargo run -p health-web --"
 
 [tasks.run-bot]
 description = "Run the Matrix bot (pass args after --)"

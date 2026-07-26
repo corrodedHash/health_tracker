@@ -33,6 +33,7 @@ fn test_state() -> crate::state::AppState {
             listen_addr: String::new(),
             static_dir: None,
             oidc: None,
+            frontend_url: None,
             dev_auto_login: false,
             cookie_secure: false,
         },
