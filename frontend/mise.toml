@@ -1,0 +1,21 @@
+monorepo_root = ".."
+
+[tools]
+pnpm = "11.3"
+
+[tasks.install]
+description = "Install frontend dependencies"
+run = "pnpm install"
+
+[tasks.dev]
+description = "Start the frontend dev server"
+depends = ["install"]
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build the frontend for production"
+run = "pnpm build"
+
+[tasks.lint]
+description = "Lint the frontend"
+run = "pnpm lint"
