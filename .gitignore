@@ -12,6 +12,9 @@ session.toml
 config/local.toml
 config/*.local.toml
 
+# Mise local overrides — per-machine env/task overrides
+.mise.local.toml
+
 # SQLx offline cache — committed so every build is type-safe without a live DB
 # .sqlx/
 
