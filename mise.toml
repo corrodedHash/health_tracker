@@ -8,6 +8,11 @@
 
 monorepo_root = true
 
+[monorepo]
+config_roots = [
+  "frontend/"
+]
+
 [tools]
 # Git hook manager — runs repo-integrity checks and linters.
 hk = "1"
