@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.3.1...health-tracker-v0.4.0) (2026-07-26)
+
+
+### Features
+
+* add Dex OIDC provider in Docker for dev testing ([#42](https://github.com/corrodedHash/health_tracker/issues/42)) ([1112d76](https://github.com/corrodedHash/health_tracker/commit/1112d7661d91c2b28100c30c3cf1943a8651ff00))
+* add Synapse E2E test setup script and local config support ([#40](https://github.com/corrodedHash/health_tracker/issues/40)) ([1d3450e](https://github.com/corrodedHash/health_tracker/commit/1d3450e31e0d87b00d3a9e741570591a35663286))
+* derive debug database name from branch for worktree isolation ([#41](https://github.com/corrodedHash/health_tracker/issues/41)) ([3f93766](https://github.com/corrodedHash/health_tracker/commit/3f937664380a6610b3781b6d92db8a377bb82980))
+* load web config from TOML files too ([#48](https://github.com/corrodedHash/health_tracker/issues/48)) ([4674cfc](https://github.com/corrodedHash/health_tracker/commit/4674cfcb2f1801e72356e5e3bbc2219fbc434ed4)), closes [#45](https://github.com/corrodedHash/health_tracker/issues/45)
+* scope frontend mise tasks to frontend/ via monorepo_root ([#43](https://github.com/corrodedHash/health_tracker/issues/43)) ([380c8f7](https://github.com/corrodedHash/health_tracker/commit/380c8f7d7a425e630776bca508f324fde8f9ccb6))
+
+
+### Bug Fixes
+
+* mise monoroot repo ([#47](https://github.com/corrodedHash/health_tracker/issues/47)) ([8110981](https://github.com/corrodedHash/health_tracker/commit/811098143717169c64733e6be746d941e499e366))
+* move OIDC auth routes under /api/auth to fix 404 behind reverse proxy ([#39](https://github.com/corrodedHash/health_tracker/issues/39)) ([58c0422](https://github.com/corrodedHash/health_tracker/commit/58c04225b618edf267d59b25d6765ecb9976d8f6))
+* specify pnpm minor version ([#37](https://github.com/corrodedHash/health_tracker/issues/37)) ([a855cad](https://github.com/corrodedHash/health_tracker/commit/a855caddfc731c4de317019483a8e6fe7a4df15d))
+
 ## [0.3.1](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.3.0...health-tracker-v0.3.1) (2026-07-19)
 
 
