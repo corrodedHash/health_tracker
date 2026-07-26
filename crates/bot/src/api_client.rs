@@ -59,6 +59,7 @@ impl ReqwestApiClient {
 
 #[async_trait]
 impl ApiClient for ReqwestApiClient {
+    #[allow(clippy::unused_self, unused_variables)]
     async fn post_run_gpx(
         &self,
         bytes: &[u8],
@@ -70,21 +71,13 @@ impl ApiClient for ReqwestApiClient {
             "{}/api/runs/gpx",
             self.config.base_url.trim_end_matches('/')
         );
-        let part = reqwest::multipart::Part::bytes(bytes.to_vec())
-            .file_name("run.gpx")
-            .mime_str("application/gpx+xml")?;
-
-        let form = reqwest::multipart::Form::new()
-            .part("file", part)
-            .text("started_at", started_at.to_rfc3339())
-            .text("distance_m", distance_m.to_string())
-            .text("duration_secs", duration.as_secs_f64().to_string());
 
         let resp = self
             .client
             .post(&url)
             .bearer_auth(&self.config.token)
-            .multipart(form)
+            .header("Content-Type", "application/gpx+xml")
+            .body(bytes.to_vec())
             .send()
             .await?;
 

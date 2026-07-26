@@ -29,11 +29,12 @@ pub async fn upload_gpx(
     UserId(user_id): UserId,
     body: Bytes,
 ) -> Result<Json<health_core::ExerciseSession>, WebError> {
-    let (total_distance, total_duration, moving_distance, moving_duration) = parse_gpx(&body)?;
+    let (started_at, total_distance, total_duration, moving_distance, moving_duration) =
+        parse_gpx(&body)?;
 
     let new_session = NewExerciseSession {
         kind: ExerciseKind::Running,
-        started_at: health_core::chrono::Utc::now(),
+        started_at,
         duration: total_duration,
         notes: None,
         quality: None,
@@ -125,9 +126,37 @@ fn compute_moving_distance_time(gpx: &gpx::Gpx, kmh_threshold: f64) -> (f64, std
     (total_distance, total_duration)
 }
 
+fn time_odt_to_chrono(
+    t: time::OffsetDateTime,
+) -> health_core::chrono::DateTime<health_core::chrono::Utc> {
+    let secs = t.unix_timestamp();
+    health_core::chrono::DateTime::from_timestamp(secs, t.nanosecond()).unwrap_or_default()
+}
+
+fn extract_started_at(
+    gpx: &gpx::Gpx,
+    first_point_time: Option<health_core::chrono::DateTime<health_core::chrono::Utc>>,
+) -> health_core::chrono::DateTime<health_core::chrono::Utc> {
+    gpx.metadata
+        .as_ref()
+        .and_then(|md| md.time)
+        .map(|t| time_odt_to_chrono(t.into()))
+        .or(first_point_time)
+        .unwrap_or_else(health_core::chrono::Utc::now)
+}
+
 fn parse_gpx(
     bytes: &[u8],
-) -> Result<(f64, std::time::Duration, f64, std::time::Duration), WebError> {
+) -> Result<
+    (
+        health_core::chrono::DateTime<health_core::chrono::Utc>,
+        f64,
+        std::time::Duration,
+        f64,
+        std::time::Duration,
+    ),
+    WebError,
+> {
     let cursor = Cursor::new(bytes);
     let gpx = gpx::read(cursor).map_err(|e| WebError::BadRequest(format!("invalid GPX: {e}")))?;
 
@@ -172,12 +201,14 @@ fn parse_gpx(
         _ => std::time::Duration::ZERO,
     };
 
-    let (moving_distance, moving_duration) = compute_moving_distance_time(&gpx, 1.5);
+    let moving = compute_moving_distance_time(&gpx, 1.5);
+    let started_at = extract_started_at(&gpx, first_time);
 
     Ok((
+        started_at,
         total_distance,
         total_duration,
-        moving_distance,
-        moving_duration,
+        moving.0,
+        moving.1,
     ))
 }

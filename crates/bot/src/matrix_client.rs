@@ -8,12 +8,23 @@
 use std::path::Path;
 
 use async_trait::async_trait;
-use matrix_sdk::ruma::events::room::message::{MessageType, OriginalSyncRoomMessageEvent};
 use matrix_sdk::{
     Client, Room, RoomState,
     config::SyncSettings,
     media::{MediaFormat, MediaRequestParameters},
-    ruma::events::room::member::StrippedRoomMemberEvent,
+    ruma::{
+        EventId, OwnedEventId, OwnedRoomId, RoomId,
+        events::{
+            reaction::ReactionEventContent,
+            relation::{Annotation, InReplyTo},
+            room::{
+                member::StrippedRoomMemberEvent,
+                message::{
+                    MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                },
+            },
+        },
+    },
 };
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -23,6 +34,8 @@ use crate::matrix_auth::{MatrixLoginConfig, get_client};
 #[derive(Debug, Clone)]
 pub struct GpxFileMetadata {
     pub filename: String,
+    pub room_id: OwnedRoomId,
+    pub event_id: OwnedEventId,
 }
 
 type GpxSender = mpsc::Sender<(Vec<u8>, GpxFileMetadata)>;
@@ -31,10 +44,32 @@ type GpxSenderCtx = matrix_sdk::event_handler::Ctx<std::sync::Arc<tokio::sync::M
 #[async_trait]
 pub trait MatrixClient: Send {
     async fn wait_for_gpx_file(&mut self) -> anyhow::Result<(Vec<u8>, GpxFileMetadata)>;
+
+    async fn send_text_reply(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        text: &str,
+    ) -> anyhow::Result<()>;
+
+    async fn send_html_reply(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        plain: &str,
+        html: &str,
+    ) -> anyhow::Result<()>;
+
+    async fn send_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        key: &str,
+    ) -> anyhow::Result<()>;
 }
 
 pub struct MatrixSdkClient {
-    _client: Client,
+    client: Client,
     rx: mpsc::Receiver<(Vec<u8>, GpxFileMetadata)>,
 }
 
@@ -65,10 +100,7 @@ impl MatrixSdkClient {
             }
         });
 
-        Ok(Self {
-            _client: client,
-            rx,
-        })
+        Ok(Self { client, rx })
     }
 }
 
@@ -79,6 +111,62 @@ impl MatrixClient for MatrixSdkClient {
             .recv()
             .await
             .ok_or_else(|| anyhow::anyhow!("matrix event channel closed"))
+    }
+
+    async fn send_text_reply(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        text: &str,
+    ) -> anyhow::Result<()> {
+        let room = self
+            .client
+            .get_room(room_id)
+            .ok_or_else(|| anyhow::anyhow!("room {room_id} not found"))?;
+
+        let mut content = RoomMessageEventContent::text_plain(text);
+        content.relates_to = Some(Relation::Reply {
+            in_reply_to: InReplyTo::new(event_id.to_owned()),
+        });
+        room.send(content).await?;
+        Ok(())
+    }
+
+    async fn send_html_reply(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        plain: &str,
+        html: &str,
+    ) -> anyhow::Result<()> {
+        let room = self
+            .client
+            .get_room(room_id)
+            .ok_or_else(|| anyhow::anyhow!("room {room_id} not found"))?;
+
+        let mut content = RoomMessageEventContent::text_html(plain, html);
+        content.relates_to = Some(Relation::Reply {
+            in_reply_to: InReplyTo::new(event_id.to_owned()),
+        });
+        room.send(content).await?;
+        Ok(())
+    }
+
+    async fn send_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        key: &str,
+    ) -> anyhow::Result<()> {
+        let room = self
+            .client
+            .get_room(room_id)
+            .ok_or_else(|| anyhow::anyhow!("room {room_id} not found"))?;
+
+        let content =
+            ReactionEventContent::new(Annotation::new(event_id.to_owned(), key.to_owned()));
+        room.send(content).await?;
+        Ok(())
     }
 }
 
@@ -96,19 +184,8 @@ async fn on_stripped_state_member(
     }
 
     tokio::spawn(async move {
-        if room.request_encryption_state().await.is_err() {
-            tracing::error!("Could not request encryption state");
-            return;
-        }
-        if !matches!(
-            room.encryption_state(),
-            matrix_sdk::EncryptionState::NotEncrypted
-        ) {
-            tracing::error!("Encrypted room {}, not joining", room.room_id());
-            return;
-        }
-
-        tracing::info!("Autojoining room {}", room.room_id());
+        // Join first — request_encryption_state() before joining tends
+        // to fail because the server won't serve state to non-members.
         let mut delay = 2u64;
 
         while let Err(err) = room.join().await {
@@ -121,14 +198,31 @@ async fn on_stripped_state_member(
                 delay = x;
             } else {
                 tracing::error!("Delay got too large, aborting");
-                break;
+                return;
             }
             if delay > 3600 {
                 tracing::error!("Can't join room {} ({err:?})", room.room_id());
-                break;
+                return;
             }
         }
         tracing::info!("Successfully joined room {}", room.room_id());
+
+        // Now check whether the room is encrypted; leave if it is.
+        if let Err(e) = room.request_encryption_state().await {
+            tracing::warn!(
+                "Could not request encryption state for room {} ({e}), \
+                 staying joined anyway",
+                room.room_id()
+            );
+        } else if !matches!(
+            room.encryption_state(),
+            matrix_sdk::EncryptionState::NotEncrypted
+        ) {
+            tracing::error!("Room {} is encrypted, leaving", room.room_id());
+            if let Err(e) = room.leave().await {
+                tracing::error!("Failed to leave room {}: {e}", room.room_id());
+            }
+        }
     });
 }
 
@@ -181,6 +275,13 @@ async fn on_room_message(
     let _ = tx
         .lock()
         .await
-        .send((bytes, GpxFileMetadata { filename }))
+        .send((
+            bytes,
+            GpxFileMetadata {
+                filename,
+                room_id: room.room_id().to_owned(),
+                event_id: event.event_id.clone(),
+            },
+        ))
         .await;
 }
