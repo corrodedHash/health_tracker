@@ -1,5 +1,8 @@
 use serde::Deserialize;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub database_url: String,
@@ -34,6 +37,8 @@ pub struct OidcConfig {
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let cfg = config::Config::builder()
+            .add_source(config::File::with_name("config/default").required(false))
+            .add_source(config::File::with_name("config/local").required(false))
             .add_source(config::Environment::with_prefix("HEALTH").separator("__"))
             .build()?
             .try_deserialize()?;
