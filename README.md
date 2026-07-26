@@ -93,7 +93,7 @@ The `session.toml` file persisted by the bot is git-ignored.
 
 ## Development
 
-`mise` tasks are wired up (see `mise.toml`):
+`mise` tasks are wired up (see `mise.toml` and `frontend/mise.toml`):
 
 | Task                                | Description                              |
 |-------------------------------------|------------------------------------------|
@@ -104,10 +104,10 @@ The `session.toml` file persisted by the bot is git-ignored.
 | `mise run check`                    | Run `fmt-check`, `lint`, `test`          |
 | `mise run run-web`                  | Run the web server                       |
 | `mise run run-bot`                  | Run the bot                              |
-| `mise run frontend-install`         | Install frontend dependencies            |
-| `mise run frontend-dev`             | Start the frontend dev server            |
-| `mise run frontend-build`           | Build the frontend for production        |
-| `mise run frontend-lint`            | Lint the frontend                        |
+| (in `frontend/`) `mise run install`  | Install frontend dependencies            |
+| (in `frontend/`) `mise run dev`      | Start the frontend dev server            |
+| (in `frontend/`) `mise run build`    | Build the frontend for production        |
+| (in `frontend/`) `mise run lint`     | Lint the frontend                        |
 | `mise run db-up`                    | Start a local Postgres container         |
 | `mise run db-down`                  | Stop the Postgres container              |
 | `mise run sqlx-prepare`             | Regenerate the sqlx offline cache        |
