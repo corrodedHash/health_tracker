@@ -5,6 +5,7 @@
 //! and uploaded to the web API.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use health_bot::api_client::{ApiClient, ApiConfig, ReqwestApiClient};
 use health_bot::gpx::process_gpx;
@@ -35,6 +36,7 @@ struct ApiSection {
 fn load_config() -> anyhow::Result<BotConfig> {
     let config = config::Config::builder()
         .add_source(config::File::with_name("config/default").required(false))
+        .add_source(config::File::with_name("config/local").required(false))
         .add_source(config::Environment::with_prefix("HEALTH"))
         .build()?;
 
@@ -74,13 +76,91 @@ async fn main() -> anyhow::Result<()> {
 
     while let Ok((bytes, metadata)) = matrix_client.wait_for_gpx_file().await {
         tracing::info!("Processing GPX file: {}", metadata.filename);
-        if let Err(e) = handle_gpx(&api_client, &bytes).await {
-            tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
+        match handle_gpx(&api_client, &bytes).await {
+            Ok(()) => {
+                if let Ok(result) = process_gpx(&bytes) {
+                    let (plain, html) = format_gpx_result(&result);
+                    let _ = matrix_client
+                        .send_html_reply(&metadata.room_id, &metadata.event_id, &plain, &html)
+                        .await;
+                }
+                let _ = matrix_client
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "✅")
+                    .await;
+            }
+            Err(e) => {
+                tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
+                let msg = format!("{e:#}");
+                let _ = matrix_client
+                    .send_text_reply(&metadata.room_id, &metadata.event_id, &msg)
+                    .await;
+                let _ = matrix_client
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                    .await;
+            }
         }
     }
 
     tracing::info!("Matrix event channel closed, shutting down");
     Ok(())
+}
+
+fn format_duration(d: Duration) -> String {
+    let total = d.as_secs();
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn format_pace(d: Duration, dist_m: f64) -> String {
+    let secs_per_km = if dist_m > 0.0 {
+        d.as_secs_f64() / (dist_m / 1000.0)
+    } else {
+        0.0
+    };
+    let m = secs_per_km as u64 / 60;
+    let s = secs_per_km as u64 % 60;
+    format!("{m}:{s:02}/km")
+}
+
+fn format_gpx_result(r: &health_bot::gpx::GpxResult) -> (String, String) {
+    let dist_km = |m: f64| m / 1000.0;
+
+    let plain = format!(
+        concat!(
+            "Run uploaded ✅\n",
+            "Total: {:.2} km in {} ({})\n",
+            "Moving: {:.2} km in {} ({})",
+        ),
+        dist_km(r.total_distance_m),
+        format_duration(r.total_duration),
+        format_pace(r.total_duration, r.total_distance_m),
+        dist_km(r.moving_distance_m),
+        format_duration(r.moving_duration),
+        format_pace(r.moving_duration, r.moving_distance_m),
+    );
+
+    let html = format!(
+        concat!(
+            "<strong>Run uploaded</strong> ✅<br>",
+            "Total: <strong>{:.2} km</strong> in {} (<em>{}</em>)<br>",
+            "Moving: <strong>{:.2} km</strong> in {} (<em>{}</em>)",
+        ),
+        dist_km(r.total_distance_m),
+        format_duration(r.total_duration),
+        format_pace(r.total_duration, r.total_distance_m),
+        dist_km(r.moving_distance_m),
+        format_duration(r.moving_duration),
+        format_pace(r.moving_duration, r.moving_distance_m),
+    );
+
+    (plain, html)
 }
 
 async fn handle_gpx<A: ApiClient>(api: &A, bytes: &[u8]) -> anyhow::Result<()> {

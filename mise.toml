@@ -39,6 +39,10 @@ run = "./tools/run-web.sh"
 description = "Run the Matrix bot (pass args after --)"
 run = "cargo run -p health-bot --"
 
+[tasks.ensure-synapse]
+description = "Start a local Synapse container and generate config/local.toml for Matrix bot E2E testing"
+run = "./tools/ensure-synapse.sh"
+
 [tasks.test]
 description = "Run the test suite"
 depends = ["ensure-debug-database"]
