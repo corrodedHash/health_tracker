@@ -1,19 +1,12 @@
 # Task runner for health_tracker. The Rust toolchain itself is pinned via
 # rust-toolchain.toml (rustup-native); mise handles tasks plus a couple of
 # auxiliary dev tools (not the compiler).
-# Run `mise tasks` to list, `mise run <task>` to execute.
-#
-# ── Dev workflows ──────────────────────────────────────────────────────────────
-#   mise run dev              Full stack: Postgres + Dex OIDC + web server
-#   mise run run-web          Lightweight: Postgres + web server (auto-login, no OIDC)
-#   mise run frontend-dev     Vite dev server (run in a separate terminal)
-#   mise run run-bot          Matrix bot (needs Synapse running, see ensure-synapse)
-#   mise run test             Test suite (needs Postgres)
-#   mise run regenerate-sqlx  Refresh SQLx offline cache after schema changes
-#
+# 
 # ── Local overrides ────────────────────────────────────────────────────────────
 # Create .mise.local.toml to override any env/task without modifying this file.
 # See the template in .mise.local.toml for available options.
+
+monorepo_root = true
 
 [tools]
 # Git hook manager — runs repo-integrity checks and linters.
