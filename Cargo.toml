@@ -76,6 +76,7 @@ haversine-rs  = "0.3"
 # Test-only
 mockall       = "0.13"
 http-body-util = "0.1"
+tempfile      = "3"
 
 
 # === Workspace-wide lints (mirrors the strict profile from both parent repos) ===

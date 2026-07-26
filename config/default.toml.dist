@@ -8,22 +8,33 @@
 #
 #
 # ── health-web (web server) ──────────────────────────────────────────────────
-# The web binary reads env vars only (no TOML). Prefix: HEALTH__, separator: __
+# Reads config/default.toml → config/local.toml → HEALTH__* env vars (highest).
+# Env prefix: HEALTH__, separator: __
 #
-#   HEALTH__DATABASE_URL            Required   Postgres connection string
-#   HEALTH__COOKIE_KEY              Required   Hex-encoded 64-byte key
-#                                            (generate: openssl rand -hex 64)
-#   HEALTH__LISTEN_ADDR             Optional   Default "0.0.0.0:3000"
-#   HEALTH__STATIC_DIR              Optional   Path to pre-built frontend dist/
-#   HEALTH__FRONTEND_URL            Optional   Frontend origin for CORS/redirects
-#   HEALTH__COOKIE_SECURE           Optional   Default "true" (set "false" for HTTP)
-#   HEALTH__DEV_AUTO_LOGIN          Optional   Default "false" — dev-only
+#   ENV VAR                        TOML KEY              Required  Description
+#   ─────────────────────────────────────────────────────────────────────────────
+#   HEALTH__DATABASE_URL           database_url           Yes       Postgres connection string
+#   HEALTH__COOKIE_KEY             cookie_key             Yes       Hex-encoded 64-byte key
+#                                                                   (generate: openssl rand -hex 64)
+#   HEALTH__LISTEN_ADDR            listen_addr            No        Default "0.0.0.0:3000"
+#   HEALTH__STATIC_DIR             static_dir             No        Path to pre-built frontend dist/
+#   HEALTH__FRONTEND_URL           frontend_url           No        Frontend origin for CORS/redirects
+#   HEALTH__COOKIE_SECURE          cookie_secure          No        Default "true" (set "false" for HTTP)
+#   HEALTH__DEV_AUTO_LOGIN         dev_auto_login         No        Default "false" — dev-only
 #
 #   # OIDC — optional, set all four or none:
-#   HEALTH__OIDC__ISSUER_URL                  OIDC provider issuer URL
-#   HEALTH__OIDC__CLIENT_ID                   OIDC client ID
-#   HEALTH__OIDC__CLIENT_SECRET               OIDC client secret
-#   HEALTH__OIDC__REDIRECT_URI                OIDC callback URL
+#   HEALTH__OIDC__ISSUER_URL      oidc.issuer_url                  OIDC provider issuer URL
+#   HEALTH__OIDC__CLIENT_ID       oidc.client_id                   OIDC client ID
+#   HEALTH__OIDC__CLIENT_SECRET   oidc.client_secret               OIDC client secret
+#   HEALTH__OIDC__REDIRECT_URI    oidc.redirect_uri                OIDC callback URL
+#
+# ── Example: config/default.toml ──────────────────────────────────────────────
+#
+# [oidc]
+# issuer_url = "https://accounts.example.com/realms/health"
+# client_id = "health-tracker"
+# client_secret = "s3cr3t"
+# redirect_uri = "https://health.example.com/api/auth/callback"
 #
 # Example (export in your shell / systemd unit / Kubernetes Secret):
 #

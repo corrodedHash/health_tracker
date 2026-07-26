@@ -42,6 +42,7 @@ utoipa       = { workspace = true, features = ["axum_extras", "chrono", "uuid"] 
 [dev-dependencies]
 tower        = { workspace = true, features = ["util"] }
 http-body-util = { workspace = true }
+tempfile     = { workspace = true }
 
 [lints]
 workspace = true
