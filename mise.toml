@@ -16,7 +16,6 @@
 # See the template in .mise.local.toml for available options.
 
 [tools]
-pnpm = "11.3"
 # Git hook manager — runs repo-integrity checks and linters.
 hk = "1"
 
@@ -76,20 +75,3 @@ run = "./tools/ensure-synapse.sh"
 description = "Run the test suite"
 depends = ["ensure-debug-database"]
 run = "cargo test --all-features"
-
-[tasks.frontend-install]
-description = "Install frontend dependencies"
-run = "pnpm --dir frontend install"
-
-[tasks.frontend-dev]
-description = "Start the frontend dev server"
-depends = ["frontend-install"]
-run = "pnpm --dir frontend dev"
-
-[tasks.frontend-build]
-description = "Build the frontend for production"
-run = "pnpm --dir frontend build"
-
-[tasks.frontend-lint]
-description = "Lint the frontend"
-run = "pnpm --dir frontend lint"
