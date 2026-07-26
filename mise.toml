@@ -2,6 +2,18 @@
 # rust-toolchain.toml (rustup-native); mise handles tasks plus a couple of
 # auxiliary dev tools (not the compiler).
 # Run `mise tasks` to list, `mise run <task>` to execute.
+#
+# ── Dev workflows ──────────────────────────────────────────────────────────────
+#   mise run dev              Full stack: Postgres + Dex OIDC + web server
+#   mise run run-web          Lightweight: Postgres + web server (auto-login, no OIDC)
+#   mise run frontend-dev     Vite dev server (run in a separate terminal)
+#   mise run run-bot          Matrix bot (needs Synapse running, see ensure-synapse)
+#   mise run test             Test suite (needs Postgres)
+#   mise run regenerate-sqlx  Refresh SQLx offline cache after schema changes
+#
+# ── Local overrides ────────────────────────────────────────────────────────────
+# Create .mise.local.toml to override any env/task without modifying this file.
+# See the template in .mise.local.toml for available options.
 
 [tools]
 # Git hook manager — runs repo-integrity checks and linters.
@@ -39,13 +51,20 @@ env = { HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aeb
 run = "./tools/run-web.sh"
 
 [tasks.run-web-oidc]
-description = "Run the web server with a real OIDC provider (Dex in Docker) — pass args after --"
+description = "Run the web server with a real OIDC provider (Dex in Docker) — uses per-branch database"
 depends = ["ensure-debug-database", "ensure-oidc"]
-env = { HEALTH__DATABASE_URL = "postgres://health:health@localhost:5432/health", HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__OIDC__ISSUER_URL = "http://localhost:5556/dex", HEALTH__OIDC__CLIENT_ID = "health-tracker", HEALTH__OIDC__CLIENT_SECRET = "dev-secret", HEALTH__OIDC__REDIRECT_URI = "http://localhost:3000/auth/callback", HEALTH__FRONTEND_URL = "http://localhost:5173" }
-run = "cargo run -p health-web --"
+env = { HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__OIDC__ISSUER_URL = "http://localhost:5556/dex", HEALTH__OIDC__CLIENT_ID = "health-tracker", HEALTH__OIDC__CLIENT_SECRET = "dev-secret", HEALTH__OIDC__REDIRECT_URI = "http://localhost:5173/api/auth/callback", HEALTH__FRONTEND_URL = "http://localhost:5173" }
+run = "./tools/run-web.sh"
+
+[tasks.dev]
+description = "Start the full dev environment (Postgres + Dex + web server with OIDC and per-branch database)"
+depends = ["ensure-debug-database", "ensure-oidc"]
+env = { HEALTH__COOKIE_KEY = "b747717c6d3469963357b32b541548b95536b3eb365edd7aebdba44c707407881a9a5dbeec995e0502f03a434e00d6be661fdd02c61ae2925bd492b6d604bc8e", HEALTH__OIDC__ISSUER_URL = "http://localhost:5556/dex", HEALTH__OIDC__CLIENT_ID = "health-tracker", HEALTH__OIDC__CLIENT_SECRET = "dev-secret", HEALTH__OIDC__REDIRECT_URI = "http://localhost:5173/api/auth/callback", HEALTH__FRONTEND_URL = "http://localhost:5173" }
+run = "./tools/run-web.sh"
 
 [tasks.run-bot]
-description = "Run the Matrix bot (pass args after --)"
+description = "Run the Matrix bot (auto-starts Synapse; pass args after --)"
+depends = ["ensure-synapse"]
 run = "cargo run -p health-bot --"
 
 [tasks.ensure-synapse]

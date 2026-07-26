@@ -9,7 +9,7 @@ web:
 staticClients:
   - id: health-tracker
     redirectURIs:
-      - 'http://localhost:3000/auth/callback'
+      - 'http://localhost:5173/api/auth/callback'
     name: 'Health Tracker'
     secret: dev-secret
 
