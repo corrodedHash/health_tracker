@@ -37,6 +37,7 @@ chrono       = { workspace = true }
 [dev-dependencies]
 mockall      = { workspace = true }
 wiremock     = { workspace = true }
+tempfile     = { workspace = true }
 
 [lints]
 workspace = true

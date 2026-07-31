@@ -54,18 +54,17 @@
 #
 #
 # ── health-bot (Matrix bot) ──────────────────────────────────────────────────
-# Reads config/default.toml → config/local.toml → HEALTH_* env vars (highest).
-# Env prefix: HEALTH_, nesting separator: __
-# Unlike the web server, the prefix is HEALTH_ (single underscore, no double).
+# Reads config/default.toml → config/local.toml → HEALTH__* env vars (highest).
+# Same prefix and separator as the web server: HEALTH__, nesting separator __.
 #
 #   ENV VAR                        TOML KEY              Required  Description
 #   ─────────────────────────────────────────────────────────────────────────────
-#   HEALTH_MATRIX__HOMESERVER      matrix.homeserver     No        Default "https://matrix.org"
-#   HEALTH_MATRIX__USER_ID         matrix.user_id        Yes       Bot Matrix user ID
-#   HEALTH_MATRIX__PASSWORD        matrix.password       Yes       Bot password
-#   HEALTH_MATRIX__SESSION_FILE    matrix.session_file   No        Default "session.toml"
-#   HEALTH_API__BASE_URL           api.base_url          No        Default "http://localhost:3000"
-#   HEALTH_API__TOKEN              api.token             Yes       Bearer token for health-web API
+#   HEALTH__MATRIX__HOMESERVER     matrix.homeserver     No        Default "https://matrix.org"
+#   HEALTH__MATRIX__USER_ID        matrix.user_id        Yes       Bot Matrix user ID
+#   HEALTH__MATRIX__PASSWORD       matrix.password       Yes       Bot password
+#   HEALTH__MATRIX__SESSION_FILE   matrix.session_file   No        Default "session.toml"
+#   HEALTH__API__BASE_URL          api.base_url          No        Default "http://localhost:3000"
+#   HEALTH__API__TOKEN             api.token             Yes       Bearer token for health-web API
 #
 # ── Example: config/default.toml ──────────────────────────────────────────────
 #
@@ -81,12 +80,12 @@
 #
 # ── Or use env vars instead (overrides TOML): ─────────────────────────────────
 #
-#   export HEALTH_MATRIX__HOMESERVER="https://matrix.example.com"
-#   export HEALTH_MATRIX__USER_ID="@health-bot:matrix.example.com"
-#   export HEALTH_MATRIX__PASSWORD="matrix-bot-password"
-#   export HEALTH_MATRIX__SESSION_FILE="session.toml"
-#   export HEALTH_API__BASE_URL="https://health.example.com"
-#   export HEALTH_API__TOKEN="ht-api-token"
+#   export HEALTH__MATRIX__HOMESERVER="https://matrix.example.com"
+#   export HEALTH__MATRIX__USER_ID="@health-bot:matrix.example.com"
+#   export HEALTH__MATRIX__PASSWORD="matrix-bot-password"
+#   export HEALTH__MATRIX__SESSION_FILE="session.toml"
+#   export HEALTH__API__BASE_URL="https://health.example.com"
+#   export HEALTH__API__TOKEN="ht-api-token"
 #
 #   export RUST_LOG="health_bot=info"
 #   exec health-bot
