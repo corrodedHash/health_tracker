@@ -99,12 +99,12 @@ All keys can be overridden via `HEALTH_*` env vars.
 
 | Required | Env var / TOML key | Purpose |
 |----------|---------------------|---------|
-| ✅ | `HEALTH_MATRIX__USER_ID` / `matrix.user_id` | Bot Matrix user ID |
-| ✅ | `HEALTH_MATRIX__PASSWORD` / `matrix.password` | Bot password |
-| ✅ | `HEALTH_API__TOKEN` / `api.token` | Bearer token for the web API |
-| ❌ | `HEALTH_MATRIX__HOMESERVER` / `matrix.homeserver` | Default `https://matrix.org` |
-| ❌ | `HEALTH_MATRIX__SESSION_FILE` / `matrix.session_file` | Default `session.toml` |
-| ❌ | `HEALTH_API__BASE_URL` / `api.base_url` | Default `http://localhost:3000` |
+| ✅ | `HEALTH__MATRIX__USER_ID` / `matrix.user_id` | Bot Matrix user ID |
+| ✅ | `HEALTH__MATRIX__PASSWORD` / `matrix.password` | Bot password |
+| ✅ | `HEALTH__API__TOKEN` / `api.token` | Bearer token for the web API |
+| ❌ | `HEALTH__MATRIX__HOMESERVER` / `matrix.homeserver` | Default `https://matrix.org` |
+| ❌ | `HEALTH__MATRIX__SESSION_FILE` / `matrix.session_file` | Default `session.toml` |
+| ❌ | `HEALTH__API__BASE_URL` / `api.base_url` | Default `http://localhost:3000` |
 
 ## Development
 

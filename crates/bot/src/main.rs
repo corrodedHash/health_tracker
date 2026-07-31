@@ -37,7 +37,7 @@ fn load_config() -> anyhow::Result<BotConfig> {
     let config = config::Config::builder()
         .add_source(config::File::with_name("config/default").required(false))
         .add_source(config::File::with_name("config/local").required(false))
-        .add_source(config::Environment::with_prefix("HEALTH"))
+        .add_source(config::Environment::with_prefix("HEALTH").separator("__"))
         .build()?;
 
     let bot_config: BotConfig = config.try_deserialize()?;
@@ -50,11 +50,11 @@ async fn main() -> anyhow::Result<()> {
 
     let cfg = load_config()?;
     if cfg.api.token.is_empty() {
-        anyhow::bail!("API token is empty — set HEALTH_API__TOKEN");
+        anyhow::bail!("API token is empty — set HEALTH__API__TOKEN");
     }
     if cfg.matrix.user_id.is_empty() || cfg.matrix.password.is_empty() {
         anyhow::bail!(
-            "Matrix credentials missing — set HEALTH_MATRIX__USER_ID and HEALTH_MATRIX__PASSWORD"
+            "Matrix credentials missing — set HEALTH__MATRIX__USER_ID and HEALTH__MATRIX__PASSWORD"
         );
     }
 
@@ -181,4 +181,73 @@ async fn handle_gpx<A: ApiClient>(api: &A, bytes: &[u8]) -> anyhow::Result<()> {
         result.started_at
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, unsafe_code)]
+
+    use std::env;
+
+    use super::load_config;
+
+    #[test]
+    fn env_vars_override_file_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config");
+        std::fs::create_dir_all(&config_path).unwrap();
+
+        std::fs::write(
+            config_path.join("default.toml"),
+            r#"
+[matrix]
+homeserver = "https://file.example.com"
+user_id = "@file:example.com"
+password = "file-password"
+session_file = "file-session.toml"
+
+[api]
+base_url = "http://file:3000"
+token = "file-token"
+"#,
+        )
+        .unwrap();
+
+        let original_cwd = env::current_dir().unwrap();
+        env::set_current_dir(dir.path()).unwrap();
+
+        // SAFETY: single-threaded test — no concurrent env access
+        unsafe {
+            env::set_var("HEALTH__MATRIX__HOMESERVER", "https://matrix.example.com");
+            env::set_var("HEALTH__MATRIX__USER_ID", "@bot:matrix.example.com");
+            env::set_var("HEALTH__MATRIX__PASSWORD", "env-password");
+            env::set_var("HEALTH__MATRIX__SESSION_FILE", "env-session.toml");
+            env::set_var("HEALTH__API__BASE_URL", "http://web:3000");
+            env::set_var("HEALTH__API__TOKEN", "env-token");
+        }
+
+        let result = load_config();
+
+        // SAFETY: single-threaded test — no concurrent env access
+        unsafe {
+            env::remove_var("HEALTH__MATRIX__HOMESERVER");
+            env::remove_var("HEALTH__MATRIX__USER_ID");
+            env::remove_var("HEALTH__MATRIX__PASSWORD");
+            env::remove_var("HEALTH__MATRIX__SESSION_FILE");
+            env::remove_var("HEALTH__API__BASE_URL");
+            env::remove_var("HEALTH__API__TOKEN");
+        }
+        env::set_current_dir(original_cwd).unwrap();
+
+        let config = result.unwrap();
+        assert_eq!(config.matrix.homeserver, "https://matrix.example.com");
+        assert_eq!(config.matrix.user_id, "@bot:matrix.example.com");
+        assert_eq!(config.matrix.password, "env-password");
+        assert_eq!(
+            config.matrix.session_file.to_str(),
+            Some("env-session.toml")
+        );
+        assert_eq!(config.api.base_url, "http://web:3000");
+        assert_eq!(config.api.token, "env-token");
+    }
 }
