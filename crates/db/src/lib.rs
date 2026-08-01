@@ -9,7 +9,8 @@
 //! - [`traits`] — the eight repository traits (the mock boundary used
 //!   by `web` / `bot` per the design's testability sketch).
 //! - [`repo`] — [`repo::SqlxRepository`], the concrete Postgres impl.
-//! - [`migrate`] — [`migrate::run_migrations`] for startup.
+//! - [`migrate`] — embedded migrations + [`migrate::run_migrations`]
+//!   for startup.
 //!
 //! ## Compile-time query checking
 //!
@@ -27,7 +28,7 @@ pub mod repo;
 pub mod traits;
 
 pub use error::DbError;
-pub use migrate::{MIGRATIONS_DIR, run_migrations};
+pub use migrate::run_migrations;
 pub use repo::SqlxRepository;
 pub use traits::{
     ApiTokenRepository, CoreRepository, HeartrateRepository, OidcStateRepository,
