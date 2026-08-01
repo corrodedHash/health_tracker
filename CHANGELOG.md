@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.4.0...health-tracker-v0.5.0) (2026-08-01)
+
+
+### Features
+
+* **db:** embed migrations in the binary ([#53](https://github.com/corrodedHash/health_tracker/issues/53)) ([3f65f66](https://github.com/corrodedHash/health_tracker/commit/3f65f6619352b69e9fa76bba2fe45556a4b6bf3c))
+
+
+### Bug Fixes
+
+* **bot:** use HEALTH__ separator for env config ([#51](https://github.com/corrodedHash/health_tracker/issues/51)) ([9abd946](https://github.com/corrodedHash/health_tracker/commit/9abd946e7dd966a23e2f35309c36f38eaaf15068))
+
 ## [0.4.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.3.1...health-tracker-v0.4.0) (2026-07-26)
 
 
