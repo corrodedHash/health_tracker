@@ -1,10 +1,12 @@
 import axios from "axios";
 import dayjs from "dayjs";
 import type {
+  ApiToken,
   CoreCreate,
   CoreSession,
   ExerciseKind,
   ExerciseSession,
+  NewApiToken,
   NewExerciseSession,
   RunningCreate,
   RunningSummary,
@@ -137,4 +139,22 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function checkAuth(): Promise<boolean> {
   const resp = await axios.get<{ authenticated: boolean }>("/api/auth/status");
   return resp.data.authenticated;
+}
+
+export async function listTokens(): Promise<ApiToken[]> {
+  const resp = await axios.get<ApiToken[]>("/api/tokens");
+  return resp.data;
+}
+
+export async function issueToken(label: string): Promise<NewApiToken> {
+  const resp = await axios.post<NewApiToken>(
+    "/api/tokens",
+    { label },
+    { headers: { "Content-Type": "application/json" } },
+  );
+  return resp.data;
+}
+
+export async function revokeToken(tokenId: string): Promise<void> {
+  await axios.delete(`/api/tokens/${tokenId}`);
 }

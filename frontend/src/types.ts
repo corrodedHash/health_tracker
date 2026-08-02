@@ -42,6 +42,22 @@ export interface WeightCreate {
   sets: number;
 }
 
+export interface ApiToken {
+  id: string;
+  user_id: string;
+  label: string;
+  token_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface NewApiToken {
+  id: string;
+  user_id: string;
+  label: string;
+  token: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface CoreCreate {
 }
