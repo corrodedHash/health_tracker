@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.5.0...health-tracker-v0.6.0) (2026-08-02)
+
+
+### Features
+
+* **frontend:** add API token management UI ([#54](https://github.com/corrodedHash/health_tracker/issues/54)) ([004d778](https://github.com/corrodedHash/health_tracker/commit/004d77839fb85f833604651f326780940162426e))
+
 ## [0.5.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.4.0...health-tracker-v0.5.0) (2026-08-01)
 
 
