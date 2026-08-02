@@ -8,6 +8,7 @@ import { SessionList } from "@/components/session-list";
 import { RunningPaceChart } from "@/components/running-pace-chart";
 import { RunningDistanceChart } from "@/components/running-distance-chart";
 import { CalendarHeatmap } from "@/components/calendar-heatmap";
+import { ApiTokenCard } from "@/components/api-token-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkAuth } from "@/lib/api";
@@ -66,7 +67,7 @@ function useResumeToken() {
 
 export default function App() {
   useResumeToken();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "graphs">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "graphs" | "settings">("dashboard");
 
   const authQ = useQuery({
     queryKey: ["auth", "status"],
@@ -109,7 +110,11 @@ export default function App() {
     );
   }
 
-  const tabs: Array<"dashboard" | "graphs"> = ["dashboard", "graphs"];
+  const tabs: Array<"dashboard" | "graphs" | "settings"> = [
+    "dashboard",
+    "graphs",
+    "settings",
+  ];
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
@@ -143,6 +148,8 @@ export default function App() {
             <SessionList />
           </section>
         </>
+      ) : activeTab === "settings" ? (
+        <ApiTokenCard />
       ) : (
         <div className="space-y-6">
           <Card>
