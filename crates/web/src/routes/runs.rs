@@ -8,7 +8,7 @@ use axum::response::{IntoResponse, Response};
 use uuid::Uuid;
 
 use health_core::{ExerciseKind, NewExerciseSession, RunningSession};
-use health_db::{RunningRepository, SessionsRepository, SqlxRepository};
+use health_db::{RunningRepository, SqlxRepository};
 
 use crate::error::WebError;
 use crate::middleware::session::UserId;
@@ -19,7 +19,8 @@ use crate::state::AppState;
     path = "/api/runs/gpx",
     request_body(content = inline(serde_json::Value), description = "Raw GPX file bytes"),
     responses(
-        (status = 200, description = "Run session created"),
+        (status = 201, description = "Run session created"),
+        (status = 200, description = "Duplicate GPX — existing run session returned"),
     ),
     tag = "runs",
 )]
@@ -28,7 +29,7 @@ pub async fn upload_gpx(
     State(state): State<AppState>,
     UserId(user_id): UserId,
     body: Bytes,
-) -> Result<Json<health_core::ExerciseSession>, WebError> {
+) -> Result<Response, WebError> {
     let (started_at, total_distance, total_duration, moving_distance, moving_duration) =
         parse_gpx(&body)?;
 
@@ -41,18 +42,22 @@ pub async fn upload_gpx(
     };
 
     let repo = SqlxRepository::new(state.pool.clone());
-    let session = SessionsRepository::insert(&repo, user_id, &new_session).await?;
-
     let running = RunningSession {
-        session_id: session.id,
+        session_id: Uuid::nil(),
         distance_m: total_distance as i32,
         moving_distance_m: Some(moving_distance as i32),
         moving_time: Some(moving_duration.as_secs_f64()),
         gpx_data: Some(body.to_vec()),
     };
-    RunningRepository::insert(&repo, session.id, &running).await?;
 
-    Ok(Json(session))
+    let outcome =
+        RunningRepository::insert_run_with_gpx(&repo, user_id, &new_session, &running).await?;
+
+    let (status, session) = match outcome {
+        health_db::InsertRunOutcome::Created(session) => (StatusCode::CREATED, session),
+        health_db::InsertRunOutcome::Duplicate(session) => (StatusCode::OK, session),
+    };
+    Ok((status, Json(session)).into_response())
 }
 
 #[utoipa::path(
