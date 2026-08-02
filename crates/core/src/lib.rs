@@ -247,6 +247,24 @@ pub struct NewOidcState {
 }
 
 // ---------------------------------------------------------------------------
+/// A bot-initiated account-link request awaiting browser confirmation.
+///
+/// The bot creates the row, the user confirms it while logged in, and the
+/// bot polls it back to receive a freshly issued API token. Lives in `core`
+/// because `db` and `web` both need to agree on its shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingLink {
+    /// Single-use random code, embedded in the confirmation URL.
+    pub code: String,
+    /// Set when the user confirms the link while logged in.
+    pub user_id: Option<Uuid>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub token_returned_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 

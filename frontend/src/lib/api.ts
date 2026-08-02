@@ -158,3 +158,7 @@ export async function issueToken(label: string): Promise<NewApiToken> {
 export async function revokeToken(tokenId: string): Promise<void> {
   await axios.delete(`/api/tokens/${tokenId}`);
 }
+
+export async function confirmLink(code: string): Promise<void> {
+  await axios.post(`/api/links/${encodeURIComponent(code)}/confirm`);
+}

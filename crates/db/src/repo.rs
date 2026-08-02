@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use health_core::{
     ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample, NewApiToken,
-    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, RunningSession, User,
-    WeightSession,
+    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, PendingLink, RunningSession,
+    User, WeightSession,
 };
 use rand::RngCore;
 use sha2::{Digest, Sha256};
@@ -26,7 +26,8 @@ use uuid::Uuid;
 use crate::error::DbError;
 use crate::traits::{
     ApiTokenRepository, CoreRepository, HeartrateRepository, OidcStateRepository,
-    RunningRepository, SessionsRepository, UsersRepository, WeightRepository,
+    PendingLinkRepository, RunningRepository, SessionsRepository, UsersRepository,
+    WeightRepository,
 };
 
 // ===========================================================================
@@ -402,6 +403,29 @@ impl From<ApiTokenRow> for ApiToken {
             token_hash: r.token_hash,
             created_at: r.created_at,
             last_used_at: r.last_used_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PendingLinkRow {
+    code: String,
+    user_id: Option<Uuid>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    accepted_at: Option<chrono::DateTime<chrono::Utc>>,
+    token_returned_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PendingLinkRow> for PendingLink {
+    fn from(r: PendingLinkRow) -> Self {
+        Self {
+            code: r.code,
+            user_id: r.user_id,
+            expires_at: r.expires_at,
+            accepted_at: r.accepted_at,
+            token_returned_at: r.token_returned_at,
+            created_at: r.created_at,
         }
     }
 }
@@ -878,6 +902,74 @@ impl ApiTokenRepository for SqlxRepository {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(Into::into).collect())
+    }
+}
+
+// ===========================================================================
+// PendingLinkRepository
+// ===========================================================================
+
+#[async_trait::async_trait]
+impl PendingLinkRepository for SqlxRepository {
+    async fn create(
+        &self,
+        code: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), DbError> {
+        sqlx::query!(
+            "INSERT INTO pending_links (code, expires_at) VALUES ($1, $2)",
+            code,
+            expires_at
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(map_err)?;
+        Ok(())
+    }
+
+    async fn confirm(&self, code: &str, user_id: Uuid) -> Result<(), DbError> {
+        let link = PendingLinkRepository::fetch(self, code).await?;
+        if link.accepted_at.is_some() {
+            return Err(DbError::Conflict("link already accepted".to_owned()));
+        }
+        if link.expires_at < chrono::Utc::now() {
+            return Err(DbError::Conflict("link expired".to_owned()));
+        }
+        sqlx::query!(
+            "UPDATE pending_links SET user_id = $2, accepted_at = NOW() WHERE code = $1",
+            code,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn fetch(&self, code: &str) -> Result<PendingLink, DbError> {
+        let row = sqlx::query_as!(
+            PendingLinkRow,
+            "SELECT code, user_id, expires_at, accepted_at, token_returned_at, created_at \
+             FROM pending_links WHERE code = $1",
+            code
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => DbError::NotFound,
+            other => map_err(other),
+        })?;
+        Ok(row.into())
+    }
+
+    async fn mark_token_returned(&self, code: &str) -> Result<bool, DbError> {
+        let res = sqlx::query!(
+            "UPDATE pending_links SET token_returned_at = NOW() \
+             WHERE code = $1 AND token_returned_at IS NULL",
+            code
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
     }
 }
 

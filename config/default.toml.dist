@@ -19,6 +19,9 @@
 #   HEALTH__LISTEN_ADDR            listen_addr            No        Default "0.0.0.0:3000"
 #   HEALTH__STATIC_DIR             static_dir             No        Path to pre-built frontend dist/
 #   HEALTH__FRONTEND_URL           frontend_url           No        Frontend origin for CORS/redirects
+#   HEALTH__PUBLIC_BASE_URL        public_base_url        No        Public origin for browser-facing URLs
+#                                                                   (account link page); falls back to
+#                                                                   frontend_url, then the request Host
 #   HEALTH__COOKIE_SECURE          cookie_secure          No        Default "true" (set "false" for HTTP)
 #   HEALTH__DEV_AUTO_LOGIN         dev_auto_login         No        Default "false" — dev-only
 #
@@ -64,7 +67,8 @@
 #   HEALTH__MATRIX__PASSWORD       matrix.password       Yes       Bot password
 #   HEALTH__MATRIX__SESSION_FILE   matrix.session_file   No        Default "session.toml"
 #   HEALTH__API__BASE_URL          api.base_url          No        Default "http://localhost:3000"
-#   HEALTH__API__TOKEN             api.token             Yes       Bearer token for health-web API
+#   HEALTH__API__TOKEN             api.token             Yes       Service bearer token for health-web API
+#   HEALTH__API__LINKS_FILE        api.links_file        No        Default "links.toml" — matrix-user → token mapping
 #
 # ── Example: config/default.toml ──────────────────────────────────────────────
 #

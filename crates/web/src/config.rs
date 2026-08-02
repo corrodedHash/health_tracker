@@ -12,6 +12,9 @@ pub struct Config {
     pub static_dir: Option<String>,
     pub oidc: Option<OidcConfig>,
     pub frontend_url: Option<String>,
+    /// Public origin used to build browser-facing URLs (e.g. the account
+    /// link page). Falls back to `frontend_url`, then to the request Host.
+    pub public_base_url: Option<String>,
     #[serde(default)]
     pub dev_auto_login: bool,
     #[serde(default = "default_cookie_secure")]
