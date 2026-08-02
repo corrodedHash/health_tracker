@@ -34,6 +34,11 @@ Workflow after any schema change:
 Run `mise tasks` to see all available tasks. Using `mise run <task>` ensures
 the correct tool versions and environment are set up automatically.
 
+If a command is not runnable via `mise tasks` or requires additional
+environment variables that `mise` does not set up, this indicates
+mis-configured dev tools. Do not work around it — flag it to the developer and
+track it as a separate issue.
+
 ## Releases (release-please)
 
 Releases are fully automated via [release-please](https://github.com/googleapis/release-please).
