@@ -55,7 +55,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Check no existing migrations modified
         run: ./tools/checks/check-migrations.sh "${{ github.event.pull_request.base.sha || 'origin/main' }}"
 
