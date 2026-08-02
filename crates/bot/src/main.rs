@@ -25,6 +25,7 @@ struct MatrixSection {
     user_id: String,
     password: String,
     session_file: PathBuf,
+    sync_token: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,7 +65,12 @@ async fn main() -> anyhow::Result<()> {
         password: cfg.matrix.password.clone(),
     };
 
-    let mut matrix_client = MatrixSdkClient::new(&matrix_login, &cfg.matrix.session_file).await?;
+    let mut matrix_client = MatrixSdkClient::new(
+        &matrix_login,
+        &cfg.matrix.session_file,
+        &cfg.matrix.sync_token,
+    )
+    .await?;
 
     let api_config = ApiConfig {
         base_url: cfg.api.base_url.clone(),
@@ -380,6 +386,7 @@ homeserver = "https://file.example.com"
 user_id = "@file:example.com"
 password = "file-password"
 session_file = "file-session.toml"
+sync_token = "file-sync-token.txt"
 
 [api]
 base_url = "http://file:3000"
@@ -397,6 +404,7 @@ token = "file-token"
             env::set_var("HEALTH__MATRIX__USER_ID", "@bot:matrix.example.com");
             env::set_var("HEALTH__MATRIX__PASSWORD", "env-password");
             env::set_var("HEALTH__MATRIX__SESSION_FILE", "env-session.toml");
+            env::set_var("HEALTH__MATRIX__SYNC_TOKEN", "env-sync-token.txt");
             env::set_var("HEALTH__API__BASE_URL", "http://web:3000");
             env::set_var("HEALTH__API__TOKEN", "env-token");
         }
@@ -409,6 +417,7 @@ token = "file-token"
             env::remove_var("HEALTH__MATRIX__USER_ID");
             env::remove_var("HEALTH__MATRIX__PASSWORD");
             env::remove_var("HEALTH__MATRIX__SESSION_FILE");
+            env::remove_var("HEALTH__MATRIX__SYNC_TOKEN");
             env::remove_var("HEALTH__API__BASE_URL");
             env::remove_var("HEALTH__API__TOKEN");
         }
@@ -421,6 +430,10 @@ token = "file-token"
         assert_eq!(
             config.matrix.session_file.to_str(),
             Some("env-session.toml")
+        );
+        assert_eq!(
+            config.matrix.sync_token.to_str(),
+            Some("env-sync-token.txt")
         );
         assert_eq!(config.api.base_url, "http://web:3000");
         assert_eq!(config.api.token, "env-token");
