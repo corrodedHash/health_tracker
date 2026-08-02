@@ -67,7 +67,11 @@ impl LinksStore {
         let file = LinksFile {
             links: self.links.clone(),
         };
-        std::fs::write(&self.path, toml::to_string(&file)?)?;
+        // Write to a temp file in the same directory then rename, so a
+        // crash mid-write can't corrupt the store and lose every link.
+        let tmp = self.path.with_extension("tmp");
+        std::fs::write(&tmp, toml::to_string(&file)?)?;
+        std::fs::rename(&tmp, &self.path)?;
         Ok(())
     }
 }

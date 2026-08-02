@@ -139,7 +139,10 @@ pub async fn poll(
         }));
     };
 
-    if link.token_returned_at.is_some() {
+    // Atomically claim the single-use token return before issuing, so two
+    // concurrent polls can never both create a token for the same link.
+    // Only the poll that wins the `mark_token_returned` race issues one.
+    if !repo.mark_token_returned(&code).await? {
         return Ok(Json(LinkPollResponse {
             status: LinkStatus::Accepted,
             token: None,
@@ -147,10 +150,9 @@ pub async fn poll(
     }
 
     let token = repo.issue(user_id, &format!("matrix-bot:{code}")).await?;
-    let claimed = repo.mark_token_returned(&code).await?;
 
     Ok(Json(LinkPollResponse {
         status: LinkStatus::Accepted,
-        token: claimed.then_some(token.token),
+        token: Some(token.token),
     }))
 }

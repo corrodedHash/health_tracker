@@ -247,6 +247,11 @@ async fn handle_link_request(
     }
 }
 
+/// Upper bound on how long the bot keeps polling a link, mirroring the
+/// server-side link TTL (15 min) with margin, so a poll task can never
+/// outlive the link — e.g. while the web server is unreachable.
+const LINK_POLL_TIMEOUT: Duration = Duration::from_mins(20);
+
 /// Poll a link until the user accepts (or it expires), then store the
 /// issued token and route a reply back through the main loop.
 async fn poll_link_until_done(
@@ -258,8 +263,21 @@ async fn poll_link_until_done(
     event_id: &OwnedEventId,
     code: &str,
 ) {
+    let deadline = tokio::time::Instant::now() + LINK_POLL_TIMEOUT;
     let mut interval = tokio::time::interval(Duration::from_secs(5));
     loop {
+        if tokio::time::Instant::now() >= deadline {
+            let _ = event_sender
+                .lock()
+                .await
+                .send(BotEvent::Reply {
+                    room_id: room_id.clone(),
+                    event_id: event_id.clone(),
+                    text: "⌛ Link expired — reply `link` to start a new one.".to_owned(),
+                })
+                .await;
+            return;
+        }
         interval.tick().await;
         match api.poll_link(code).await {
             Ok(LinkPoll {
@@ -275,17 +293,23 @@ async fn poll_link_until_done(
                     let mut guard = links_store.lock().await;
                     guard.set_token(&sender_str, &token)
                 };
-                if let Err(e) = store_result {
-                    tracing::error!("Failed to persist token for {sender_str}: {e:#}");
-                }
+                let text = match store_result {
+                    Ok(()) => {
+                        "✅ Linked to your account. Send me a .gpx file and I'll add it.".to_owned()
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to persist token for {sender_str}: {e:#}");
+                        "⚠️ Failed to save your link locally — reply `link` to try again."
+                            .to_owned()
+                    }
+                };
                 let _ = event_sender
                     .lock()
                     .await
                     .send(BotEvent::Reply {
                         room_id: room_id.clone(),
                         event_id: event_id.clone(),
-                        text: "✅ Linked to your account. Send me a .gpx file and I'll add it."
-                            .to_owned(),
+                        text,
                     })
                     .await;
                 return;
