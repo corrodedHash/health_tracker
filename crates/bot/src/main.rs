@@ -10,7 +10,7 @@ use std::time::Duration;
 use health_bot::api_client::{ApiClient, ApiConfig, ReqwestApiClient};
 use health_bot::gpx::process_gpx;
 use health_bot::matrix_auth::MatrixLoginConfig;
-use health_bot::matrix_client::{MatrixClient, MatrixSdkClient};
+use health_bot::matrix_client::{GpxFileMetadata, MatrixClient, MatrixSdkClient};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -75,34 +75,67 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("health-bot started, waiting for GPX files");
 
     while let Ok((bytes, metadata)) = matrix_client.wait_for_gpx_file().await {
-        tracing::info!("Processing GPX file: {}", metadata.filename);
-        match handle_gpx(&api_client, &bytes).await {
-            Ok(()) => {
-                if let Ok(result) = process_gpx(&bytes) {
-                    let (plain, html) = format_gpx_result(&result);
-                    let _ = matrix_client
-                        .send_html_reply(&metadata.room_id, &metadata.event_id, &plain, &html)
-                        .await;
-                }
-                let _ = matrix_client
-                    .send_reaction(&metadata.room_id, &metadata.event_id, "✅")
-                    .await;
-            }
-            Err(e) => {
-                tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
-                let msg = format!("{e:#}");
-                let _ = matrix_client
-                    .send_text_reply(&metadata.room_id, &metadata.event_id, &msg)
-                    .await;
-                let _ = matrix_client
-                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
-                    .await;
-            }
-        }
+        process_gpx_message(&matrix_client, &api_client, &bytes, &metadata).await;
     }
 
     tracing::info!("Matrix event channel closed, shutting down");
     Ok(())
+}
+
+/// Handle one GPX message: skip it if the bot already reacted (✅/❌),
+/// otherwise upload + reply + react. Extracted from the `main()` loop so the
+/// reaction-skip logic is testable through the mockable traits.
+async fn process_gpx_message<M: MatrixClient + Sync, A: ApiClient + Sync>(
+    matrix: &M,
+    api: &A,
+    bytes: &[u8],
+    metadata: &GpxFileMetadata,
+) {
+    tracing::info!("Processing GPX file: {}", metadata.filename);
+
+    match matrix
+        .has_own_reaction(&metadata.room_id, &metadata.event_id, &["✅", "❌"])
+        .await
+    {
+        Ok(true) => {
+            tracing::info!(
+                "Skipping {}: bot already reacted to {}",
+                metadata.filename,
+                metadata.event_id
+            );
+            return;
+        }
+        Ok(false) => {}
+        Err(e) => tracing::warn!(
+            "Could not check reactions for {} ({}): {e:#}, proceeding anyway",
+            metadata.event_id,
+            metadata.filename
+        ),
+    }
+
+    match handle_gpx(api, bytes).await {
+        Ok(()) => {
+            if let Ok(result) = process_gpx(bytes) {
+                let (plain, html) = format_gpx_result(&result);
+                let _ = matrix
+                    .send_html_reply(&metadata.room_id, &metadata.event_id, &plain, &html)
+                    .await;
+            }
+            let _ = matrix
+                .send_reaction(&metadata.room_id, &metadata.event_id, "✅")
+                .await;
+        }
+        Err(e) => {
+            tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
+            let msg = format!("{e:#}");
+            let _ = matrix
+                .send_text_reply(&metadata.room_id, &metadata.event_id, &msg)
+                .await;
+            let _ = matrix
+                .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                .await;
+        }
+    }
 }
 
 fn format_duration(d: Duration) -> String {
@@ -188,8 +221,150 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, unsafe_code)]
 
     use std::env;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use super::load_config;
+    use super::{load_config, process_gpx_message};
+    use health_bot::api_client::ApiClient;
+    use health_bot::matrix_client::{GpxFileMetadata, MatrixClient};
+
+    struct CountingMatrix {
+        has_own_reaction: bool,
+        reaction_sent: Arc<AtomicBool>,
+    }
+
+    #[async_trait::async_trait]
+    impl MatrixClient for CountingMatrix {
+        async fn wait_for_gpx_file(&mut self) -> anyhow::Result<(Vec<u8>, GpxFileMetadata)> {
+            anyhow::bail!("wait_for_gpx_file must not be called in unit tests")
+        }
+
+        async fn send_text_reply(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _text: &str,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_html_reply(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _plain: &str,
+            _html: &str,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_reaction(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _key: &str,
+        ) -> anyhow::Result<()> {
+            self.reaction_sent.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn has_own_reaction(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _keys: &[&str],
+        ) -> anyhow::Result<bool> {
+            Ok(self.has_own_reaction)
+        }
+    }
+
+    struct CountingApi {
+        post_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl ApiClient for CountingApi {
+        async fn post_run_gpx(
+            &self,
+            _bytes: &[u8],
+            _started_at: chrono::DateTime<chrono::Utc>,
+            _distance_m: f64,
+            _duration: std::time::Duration,
+        ) -> anyhow::Result<uuid::Uuid> {
+            self.post_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(uuid::Uuid::new_v4())
+        }
+    }
+
+    fn metadata() -> GpxFileMetadata {
+        GpxFileMetadata {
+            filename: "run.gpx".into(),
+            room_id: matrix_sdk::ruma::RoomId::parse("!room:example.com").unwrap(),
+            event_id: matrix_sdk::ruma::EventId::parse("$event:example.com").unwrap(),
+        }
+    }
+
+    #[tokio::test]
+    async fn already_reacted_message_is_skipped_before_upload() {
+        let post_calls = Arc::new(AtomicUsize::new(0));
+        let reaction_sent = Arc::new(AtomicBool::new(false));
+        let matrix = CountingMatrix {
+            has_own_reaction: true,
+            reaction_sent: reaction_sent.clone(),
+        };
+        let api = CountingApi {
+            post_calls: post_calls.clone(),
+        };
+
+        process_gpx_message(&matrix, &api, b"<gpx>", &metadata()).await;
+
+        assert_eq!(
+            post_calls.load(Ordering::SeqCst),
+            0,
+            "a message the bot already reacted to must not be re-uploaded"
+        );
+        assert!(
+            !reaction_sent.load(Ordering::SeqCst),
+            "no reply/reaction should be sent for a skipped message"
+        );
+    }
+
+    #[tokio::test]
+    async fn unreacted_message_is_uploaded() {
+        let post_calls = Arc::new(AtomicUsize::new(0));
+        let reaction_sent = Arc::new(AtomicBool::new(false));
+        let matrix = CountingMatrix {
+            has_own_reaction: false,
+            reaction_sent: reaction_sent.clone(),
+        };
+        let api = CountingApi {
+            post_calls: post_calls.clone(),
+        };
+
+        process_gpx_message(&matrix, &api, MINIMAL_GPX, &metadata()).await;
+
+        assert_eq!(
+            post_calls.load(Ordering::SeqCst),
+            1,
+            "an unreacted GPX message must be uploaded"
+        );
+        assert!(
+            reaction_sent.load(Ordering::SeqCst),
+            "success reaction should be sent"
+        );
+    }
+
+    const MINIMAL_GPX: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="health-tracker-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2026-07-16T08:00:00Z</time></metadata>
+  <trk>
+    <trkseg>
+      <trkpt lat="50.0" lon="6.0"><time>2026-07-16T08:00:00Z</time></trkpt>
+      <trkpt lat="50.009" lon="6.009"><time>2026-07-16T08:05:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
+"#;
 
     #[test]
     fn env_vars_override_file_defaults() {

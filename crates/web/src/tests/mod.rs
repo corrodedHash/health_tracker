@@ -213,3 +213,77 @@ async fn unauthenticated_bearer_route_returns_401() {
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+const TEST_GPX: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="health-tracker-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2026-07-16T08:00:00Z</time></metadata>
+  <trk>
+    <trkseg>
+      <trkpt lat="50.0" lon="6.0"><time>2026-07-16T08:00:00Z</time></trkpt>
+      <trkpt lat="50.009" lon="6.009"><time>2026-07-16T08:05:00Z</time></trkpt>
+      <trkpt lat="50.018" lon="6.018"><time>2026-07-16T08:10:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
+"#;
+
+fn state_with_pool(pool: sqlx::PgPool) -> crate::state::AppState {
+    crate::state::AppState {
+        pool,
+        config: crate::config::Config {
+            database_url: String::new(),
+            cookie_key: String::new(),
+            listen_addr: String::new(),
+            static_dir: None,
+            oidc: None,
+            frontend_url: None,
+            dev_auto_login: false,
+            cookie_secure: false,
+        },
+        cookie_key: cookie_key(),
+        oidc_bundle: None,
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn upload_gpx_same_file_returns_201_then_200(pool: sqlx::PgPool) {
+    let repo = health_db::SqlxRepository::new(pool.clone());
+    let user = health_db::UsersRepository::upsert_by_external_id(&repo, "bot-sub", Some("Bot"))
+        .await
+        .unwrap();
+    let token = health_db::ApiTokenRepository::issue(&repo, user.id, "test-bot")
+        .await
+        .unwrap();
+
+    let app = crate::routes::build_router(state_with_pool(pool));
+
+    let post = |bytes: &[u8]| {
+        Request::builder()
+            .uri("/api/runs/gpx")
+            .method("POST")
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.token))
+            .header(header::CONTENT_TYPE, "application/gpx+xml")
+            .body(Body::from(bytes.to_vec()))
+            .unwrap()
+    };
+
+    let first = app.clone().oneshot(post(TEST_GPX)).await.unwrap();
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first_body = axum::body::to_bytes(first.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let first_id: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+    let first_id = first_id["id"].as_str().unwrap().to_owned();
+
+    let second = app.clone().oneshot(post(TEST_GPX)).await.unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+    let second_body = axum::body::to_bytes(second.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let second_json: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+    assert_eq!(
+        second_json["id"].as_str().unwrap(),
+        first_id,
+        "duplicate upload must return the same session"
+    );
+}

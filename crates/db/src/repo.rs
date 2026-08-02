@@ -727,9 +727,10 @@ impl RunningRepository for SqlxRepository {
 
         let child = sqlx::query!(
             "INSERT INTO exercise_running \
-                (session_id, distance_m, moving_distance_m, moving_time, gpx_data, gpx_sha256) \
-             VALUES ($1, $2, $3, $4, $5, $6)",
+                (session_id, user_id, distance_m, moving_distance_m, moving_time, gpx_data, gpx_sha256) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
             session.id,
+            user_id,
             running.distance_m,
             running.moving_distance_m,
             running.moving_time,

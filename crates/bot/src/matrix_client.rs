@@ -14,9 +14,11 @@ use matrix_sdk::{
     media::{MediaFormat, MediaRequestParameters},
     ruma::{
         EventId, OwnedEventId, OwnedRoomId, RoomId,
+        api::client::relations::get_relating_events_with_rel_type,
         events::{
+            AnyMessageLikeEvent,
             reaction::ReactionEventContent,
-            relation::{Annotation, InReplyTo},
+            relation::{Annotation, InReplyTo, RelationType},
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{
@@ -66,6 +68,19 @@ pub trait MatrixClient: Send {
         event_id: &EventId,
         key: &str,
     ) -> anyhow::Result<()>;
+
+    /// Whether the bot has already reacted to `event_id` in `room_id` with
+    /// any of the given reaction keys (e.g. ✅ / ❌).
+    ///
+    /// Used as a client-side idempotency filter: on restart, the bot
+    /// re-sees messages it already processed and skipped them so it does
+    /// not re-upload the GPX.
+    async fn has_own_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        keys: &[&str],
+    ) -> anyhow::Result<bool>;
 }
 
 pub struct MatrixSdkClient {
@@ -168,6 +183,54 @@ impl MatrixClient for MatrixSdkClient {
         room.send(content).await?;
         Ok(())
     }
+
+    async fn has_own_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        keys: &[&str],
+    ) -> anyhow::Result<bool> {
+        has_own_reaction(&self.client, room_id, event_id, keys).await
+    }
+}
+
+/// Check whether `client`'s own user has reacted to `event_id` with any of
+/// `keys`. matrix-sdk 0.11 has no `Room::event_relations`, so this uses the
+/// raw ruma endpoint `GET /rooms/{roomId}/relations/{eventId}/m.annotation`.
+///
+/// Returns `Ok(false)` when the client has no logged-in user.
+async fn has_own_reaction(
+    client: &Client,
+    room_id: &RoomId,
+    event_id: &EventId,
+    keys: &[&str],
+) -> anyhow::Result<bool> {
+    let Some(user_id) = client.user_id() else {
+        return Ok(false);
+    };
+
+    let request = get_relating_events_with_rel_type::v1::Request::new(
+        room_id.to_owned(),
+        event_id.to_owned(),
+        RelationType::Annotation,
+    );
+    let response = client.send(request).await?;
+
+    for raw in response.chunk {
+        let Ok(AnyMessageLikeEvent::Reaction(reaction)) = raw.deserialize() else {
+            continue;
+        };
+        if reaction.sender() != user_id {
+            continue;
+        }
+        let Some(original) = reaction.as_original() else {
+            continue;
+        };
+        if keys.contains(&original.content.relates_to.key.as_str()) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn on_stripped_state_member(
@@ -250,6 +313,20 @@ async fn on_room_message(
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
     {
+        return;
+    }
+
+    // Skip messages the bot already handled (any own ✅/❌ reaction),
+    // before paying for the media download. On an error, proceed anyway:
+    // the server-side dedup makes a re-upload a no-op.
+    if matches!(
+        has_own_reaction(&client, room.room_id(), &event.event_id, &["✅", "❌"]).await,
+        Ok(true)
+    ) {
+        tracing::info!(
+            "Skipping {filename}: bot already reacted to {}",
+            event.event_id
+        );
         return;
     }
 
