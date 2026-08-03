@@ -10,8 +10,8 @@
 
 use health_core::{
     ApiToken, CoreSession, ExerciseKind, ExerciseSession, HeartrateSample, NewApiToken,
-    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, RunningSession, User,
-    WeightSession,
+    NewExerciseSession, NewHeartrateSamples, NewOidcState, OidcState, PendingLink, RunningSession,
+    User, WeightSession,
 };
 use uuid::Uuid;
 
@@ -144,4 +144,28 @@ pub trait ApiTokenRepository: Send + Sync {
 
     /// List a user's tokens (never includes cleartext — only hashes).
     async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<ApiToken>, DbError>;
+}
+
+/// `pending_links` — bot-initiated account linking that a browser-confirmed
+/// user completes, after which the bot polls back a freshly issued token.
+#[async_trait::async_trait]
+pub trait PendingLinkRepository: Send + Sync {
+    /// Insert a new link row that expires at `expires_at`.
+    async fn create(
+        &self,
+        code: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), DbError>;
+
+    /// Bind the link to the confirming user. Returns
+    /// [`DbError::NotFound`] for unknown codes, [`DbError::Conflict`] if
+    /// the link was already accepted or has expired.
+    async fn confirm(&self, code: &str, user_id: Uuid) -> Result<(), DbError>;
+
+    /// Fetch a link by code, or [`DbError::NotFound`].
+    async fn fetch(&self, code: &str) -> Result<PendingLink, DbError>;
+
+    /// Atomically claim the token-return for a link (single use). Returns
+    /// `true` only for the caller that won the race.
+    async fn mark_token_returned(&self, code: &str) -> Result<bool, DbError>;
 }

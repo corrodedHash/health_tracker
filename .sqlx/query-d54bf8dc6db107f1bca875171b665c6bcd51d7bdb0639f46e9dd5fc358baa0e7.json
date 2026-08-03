@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE pending_links SET user_id = $2, accepted_at = NOW() WHERE code = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d54bf8dc6db107f1bca875171b665c6bcd51d7bdb0639f46e9dd5fc358baa0e7"
+}

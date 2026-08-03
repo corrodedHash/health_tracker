@@ -5,5 +5,6 @@
 
 pub mod api_client;
 pub mod gpx;
+pub mod links;
 pub mod matrix_auth;
 pub mod matrix_client;

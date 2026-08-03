@@ -4,3 +4,4 @@ session_file = "session.toml"
 
 [api]
 base_url = "http://localhost:3000"
+links_file = "links.toml"

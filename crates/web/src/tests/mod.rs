@@ -34,8 +34,10 @@ fn test_state() -> crate::state::AppState {
             static_dir: None,
             oidc: None,
             frontend_url: None,
+            public_base_url: None,
             dev_auto_login: false,
             cookie_secure: false,
+            link_ttl_minutes: 5,
         },
         cookie_key: cookie_key(),
         oidc_bundle: None,
@@ -206,6 +208,50 @@ async fn unauthenticated_bearer_route_returns_401() {
 
     let req = Request::builder()
         .uri("/api/runs/gpx")
+        .method("POST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_link_requires_bearer_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links")
+        .method("POST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn poll_link_requires_bearer_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links/abc123")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn confirm_link_requires_session() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links/abc123/confirm")
         .method("POST")
         .body(Body::empty())
         .unwrap();
