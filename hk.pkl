@@ -20,10 +20,15 @@ local all_steps = new Mapping<String, Step> {
   ["cargo-test"] {
     glob = "**/*.rs"
     workspace_indicator = "Cargo.toml"
-    # Unit + binary tests only: integration tests (e.g. crates/db/tests,
-    # which spins up real Postgres via `#[sqlx::test]`) are run by CI and
-    # `mise run test` against a live database.
-    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet --lib --bins"
+    # Unit + binary tests only: integration tests are skipped by default because
+    # crates/db/tests (repo_integration.rs) spins up real Postgres via
+    # `#[sqlx::test]`; those run in CI and `mise run test` against a live database.
+    #
+    # The bot's integration tests, however, need no database (wiremock mock server
+    # and GPX fixtures only), so they are explicitly re-included here. If you add a
+    # new integration test that does NOT require a database, add its target name
+    # (file under crates/*/tests/) to the `--test` list below.
+    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet --lib --bins --test api_client --test process_gpx"
     env {
       ["SQLX_OFFLINE"] = "true"
     }
