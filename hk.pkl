@@ -14,12 +14,19 @@ local all_steps = new Mapping<String, Step> {
     check_first = false
     env {
       ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+      ["SQLX_OFFLINE"] = "true"
     }
   }
   ["cargo-test"] {
     glob = "**/*.rs"
     workspace_indicator = "Cargo.toml"
-    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet"
+    # Unit + binary tests only: integration tests (e.g. crates/db/tests,
+    # which spins up real Postgres via `#[sqlx::test]`) are run by CI and
+    # `mise run test` against a live database.
+    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet --lib --bins"
+    env {
+      ["SQLX_OFFLINE"] = "true"
+    }
   }
   ["frontend-lint"] {
     glob = "frontend/src/**/*.{ts,tsx}"
@@ -49,6 +56,7 @@ local pre_commit_steps = new Mapping<String, Step> {
     check_first = false
     env {
       ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+      ["SQLX_OFFLINE"] = "true"
     }
   }
   ["frontend-lint"] {
@@ -81,6 +89,7 @@ hooks {
         check_first = false
         env {
           ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+          ["SQLX_OFFLINE"] = "true"
         }
       }
       ["frontend-lint"] {
