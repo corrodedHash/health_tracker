@@ -17,9 +17,6 @@ use crate::error::WebError;
 use crate::middleware::session::UserId;
 use crate::state::AppState;
 
-/// How long a bot-initiated link stays valid before the user must confirm.
-const LINK_TTL_MINUTES: i64 = 15;
-
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct NewPendingLink {
     pub code: String,
@@ -74,7 +71,7 @@ pub async fn create(
     _user: UserId,
 ) -> Result<Json<NewPendingLink>, WebError> {
     let code = Uuid::new_v4().simple().to_string();
-    let expires_at = Utc::now() + chrono::TimeDelta::minutes(LINK_TTL_MINUTES);
+    let expires_at = Utc::now() + chrono::TimeDelta::minutes(state.config.link_ttl_minutes);
 
     let repo = SqlxRepository::new(state.pool.clone());
     repo.create(&code, expires_at).await?;

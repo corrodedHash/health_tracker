@@ -19,10 +19,17 @@ pub struct Config {
     pub dev_auto_login: bool,
     #[serde(default = "default_cookie_secure")]
     pub cookie_secure: bool,
+    /// How long a bot-initiated account link stays valid before it expires.
+    #[serde(default = "default_link_ttl_minutes")]
+    pub link_ttl_minutes: i64,
 }
 
 const fn default_cookie_secure() -> bool {
     true
+}
+
+const fn default_link_ttl_minutes() -> i64 {
+    5
 }
 
 fn default_listen_addr() -> String {

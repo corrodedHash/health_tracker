@@ -37,6 +37,7 @@ fn test_state() -> crate::state::AppState {
             public_base_url: None,
             dev_auto_login: false,
             cookie_secure: false,
+            link_ttl_minutes: 5,
         },
         cookie_key: cookie_key(),
         oidc_bundle: None,

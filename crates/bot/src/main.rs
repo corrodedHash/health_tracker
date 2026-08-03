@@ -40,10 +40,17 @@ struct ApiSection {
     token: String,
     #[serde(default = "default_links_file")]
     links_file: PathBuf,
+    /// How long to keep polling a link before giving up (minutes).
+    #[serde(default = "default_link_poll_timeout_minutes")]
+    link_poll_timeout_minutes: u64,
 }
 
 fn default_links_file() -> PathBuf {
     PathBuf::from("links.toml")
+}
+
+const fn default_link_poll_timeout_minutes() -> u64 {
+    5
 }
 
 fn load_config() -> anyhow::Result<BotConfig> {
@@ -89,6 +96,11 @@ async fn main() -> anyhow::Result<()> {
     let links_store = Arc::new(tokio::sync::Mutex::new(LinksStore::load(
         &cfg.api.links_file,
     )));
+    let link_context = LinkContext {
+        store: links_store.clone(),
+        event_sender: event_sender.clone(),
+        poll_timeout: Duration::from_secs(cfg.api.link_poll_timeout_minutes * 60),
+    };
 
     tracing::info!("health-bot started, waiting for GPX files and link commands");
 
@@ -105,9 +117,8 @@ async fn main() -> anyhow::Result<()> {
             } => {
                 handle_link_request(
                     &api_client,
-                    &links_store,
+                    &link_context,
                     &matrix_client,
-                    &event_sender,
                     sender,
                     room_id,
                     event_id,
@@ -191,18 +202,26 @@ async fn handle_gpx_event(
     }
 }
 
+/// Shared state for a link flow: the token store, the main-loop event
+/// channel, and how long to keep polling before giving up.
+#[derive(Clone)]
+struct LinkContext {
+    store: Arc<tokio::sync::Mutex<LinksStore>>,
+    event_sender: Arc<tokio::sync::Mutex<mpsc::Sender<BotEvent>>>,
+    poll_timeout: Duration,
+}
+
 async fn handle_link_request(
     api: &ReqwestApiClient,
-    links_store: &Arc<tokio::sync::Mutex<LinksStore>>,
+    link_ctx: &LinkContext,
     matrix: &dyn MatrixClient,
-    event_sender: &Arc<tokio::sync::Mutex<mpsc::Sender<BotEvent>>>,
     sender: matrix_sdk::ruma::OwnedUserId,
     room_id: OwnedRoomId,
     event_id: OwnedEventId,
 ) {
     let sender_str = sender.to_string();
     let already_linked = {
-        let guard = links_store.lock().await;
+        let guard = link_ctx.store.lock().await;
         guard.token_for(&sender_str).is_some()
     };
     if already_linked {
@@ -227,11 +246,10 @@ async fn handle_link_request(
                 .await;
 
             let api = api.clone();
-            let store = links_store.clone();
-            let tx = event_sender.clone();
+            let ctx = link_ctx.clone();
             let code = link.code.clone();
             tokio::spawn(async move {
-                poll_link_until_done(&api, &store, &tx, &sender, &room_id, &event_id, &code).await;
+                poll_link_until_done(&api, ctx, &sender, &room_id, &event_id, &code).await;
             });
         }
         Err(e) => {
@@ -247,27 +265,25 @@ async fn handle_link_request(
     }
 }
 
-/// Upper bound on how long the bot keeps polling a link, mirroring the
-/// server-side link TTL (15 min) with margin, so a poll task can never
-/// outlive the link — e.g. while the web server is unreachable.
-const LINK_POLL_TIMEOUT: Duration = Duration::from_mins(20);
-
 /// Poll a link until the user accepts (or it expires), then store the
-/// issued token and route a reply back through the main loop.
+/// issued token and route a reply back through the main loop. Gives up
+/// after `link_ctx.poll_timeout`, mirroring the server-side link TTL, so a
+/// poll task can never outlive the link — e.g. while the web server is
+/// unreachable.
 async fn poll_link_until_done(
     api: &ReqwestApiClient,
-    links_store: &Arc<tokio::sync::Mutex<LinksStore>>,
-    event_sender: &Arc<tokio::sync::Mutex<mpsc::Sender<BotEvent>>>,
+    link_ctx: LinkContext,
     sender: &matrix_sdk::ruma::OwnedUserId,
     room_id: &OwnedRoomId,
     event_id: &OwnedEventId,
     code: &str,
 ) {
-    let deadline = tokio::time::Instant::now() + LINK_POLL_TIMEOUT;
+    let deadline = tokio::time::Instant::now() + link_ctx.poll_timeout;
     let mut interval = tokio::time::interval(Duration::from_secs(5));
     loop {
         if tokio::time::Instant::now() >= deadline {
-            let _ = event_sender
+            let _ = link_ctx
+                .event_sender
                 .lock()
                 .await
                 .send(BotEvent::Reply {
@@ -290,7 +306,7 @@ async fn poll_link_until_done(
             }) => {
                 let sender_str = sender.to_string();
                 let store_result = {
-                    let mut guard = links_store.lock().await;
+                    let mut guard = link_ctx.store.lock().await;
                     guard.set_token(&sender_str, &token)
                 };
                 let text = match store_result {
@@ -303,7 +319,8 @@ async fn poll_link_until_done(
                             .to_owned()
                     }
                 };
-                let _ = event_sender
+                let _ = link_ctx
+                    .event_sender
                     .lock()
                     .await
                     .send(BotEvent::Reply {
@@ -325,7 +342,8 @@ async fn poll_link_until_done(
                 status: LinkStatus::Expired,
                 ..
             }) => {
-                let _ = event_sender
+                let _ = link_ctx
+                    .event_sender
                     .lock()
                     .await
                     .send(BotEvent::Reply {
@@ -489,5 +507,6 @@ token = "file-token"
         assert_eq!(config.api.base_url, "http://web:3000");
         assert_eq!(config.api.token, "env-token");
         assert_eq!(config.api.links_file.to_str(), Some("links.toml"));
+        assert_eq!(config.api.link_poll_timeout_minutes, 5);
     }
 }
