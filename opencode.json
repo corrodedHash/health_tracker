@@ -20,6 +20,7 @@
       "cargo doc *": "allow",
       "cargo clean": "allow",
       "cargo clean *": "allow",
+      "hk check *": "allow",
       "mise run build": "allow",
       "mise run release": "allow",
       "mise run run": "allow",
