@@ -238,9 +238,77 @@ impl SqlxRepository {
         .fetch_all(&self.pool)
         .await
     }
-}
 
-// ===========================================================================
+    /// Insert a session and its kind-specific child row atomically.
+    ///
+    /// Both rows go in one transaction, so a failed child insert rolls
+    /// back the parent — no orphan is ever visible, and the manual
+    /// delete-on-failure dance is unnecessary. The `session_id` inside
+    /// `child` is ignored; the parent's server-assigned id is used.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::KindMismatch`] if `child` does not match
+    /// `new.kind`, and [`DbError::Sqlx`] on any database failure (the
+    /// transaction is rolled back, so nothing is persisted).
+    pub async fn insert_session_with_child(
+        &self,
+        user_id: Uuid,
+        new: &NewExerciseSession,
+        child: Option<SessionChild>,
+    ) -> Result<ExerciseSession, DbError> {
+        let mut tx = self.pool.begin().await?;
+        let session = insert_session_exec(&mut *tx, user_id, new)
+            .await
+            .map_err(map_err)?;
+
+        match child {
+            None => {}
+            Some(SessionChild::Weight(w)) => {
+                enforce_kind(&mut tx, session.id, ExerciseKind::Weight).await?;
+                sqlx::query!(
+                    "INSERT INTO exercise_weight (session_id, weight_g, sets) \
+                      VALUES ($1, $2, $3)",
+                    session.id,
+                    w.weight_g,
+                    w.sets
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(map_err)?;
+            }
+            Some(SessionChild::Core) => {
+                enforce_kind(&mut tx, session.id, ExerciseKind::Core).await?;
+                sqlx::query!(
+                    "INSERT INTO exercise_core (session_id) VALUES ($1)",
+                    session.id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(map_err)?;
+            }
+            Some(SessionChild::Running(r)) => {
+                enforce_kind(&mut tx, session.id, ExerciseKind::Running).await?;
+                sqlx::query!(
+                    "INSERT INTO exercise_running \
+                      (session_id, distance_m, moving_distance_m, moving_time, gpx_data) \
+                      VALUES ($1, $2, $3, $4, $5)",
+                    session.id,
+                    r.distance_m,
+                    r.moving_distance_m,
+                    r.moving_time,
+                    r.gpx_data.as_deref()
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(map_err)?;
+            }
+        }
+
+        tx.commit().await?;
+        session.try_into()
+    }
+}
 // Row structs — `FromRow` derive + `From` conversion to core types.
 // ===========================================================================
 
@@ -540,21 +608,9 @@ impl SessionsRepository for SqlxRepository {
         user_id: Uuid,
         new: &NewExerciseSession,
     ) -> Result<ExerciseSession, DbError> {
-        let row = sqlx::query_as!(
-            SessionRow,
-            "INSERT INTO exercises (user_id, kind, started_at, duration, notes, quality) \
-              VALUES ($1, $2, $3, $4, $5, $6) \
-              RETURNING id, user_id, kind, started_at, duration, notes, quality, created_at",
-            user_id,
-            new.kind.as_str(),
-            new.started_at,
-            std_to_interval(new.duration),
-            new.notes.as_deref(),
-            new.quality
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(map_err)?;
+        let row = insert_session_exec(&self.pool, user_id, new)
+            .await
+            .map_err(map_err)?;
         row.try_into()
     }
 
@@ -977,6 +1033,42 @@ impl PendingLinkRepository for SqlxRepository {
 // Shared: enforce_kind — guards the CTI child inserts inside the tx,
 // since Postgres CHECK cannot reference other tables.
 // ===========================================================================
+
+/// Kind-specific child row inserted atomically with its parent.
+///
+/// The parent's server-assigned id is used regardless of any
+/// `session_id` set on the carried struct.
+#[derive(Debug)]
+pub enum SessionChild {
+    Weight(WeightSession),
+    Core,
+    Running(RunningSession),
+}
+
+/// Insert the parent `exercises` row via `exec` (either the pool or a
+/// transaction), returning the fully-populated row. Shared by
+/// [`SessionsRepository::insert`] and
+/// [`SqlxRepository::insert_session_with_child`].
+async fn insert_session_exec(
+    exec: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+    user_id: Uuid,
+    new: &NewExerciseSession,
+) -> Result<SessionRow, sqlx::Error> {
+    sqlx::query_as!(
+        SessionRow,
+        "INSERT INTO exercises (user_id, kind, started_at, duration, notes, quality) \
+          VALUES ($1, $2, $3, $4, $5, $6) \
+          RETURNING id, user_id, kind, started_at, duration, notes, quality, created_at",
+        user_id,
+        new.kind.as_str(),
+        new.started_at,
+        std_to_interval(new.duration),
+        new.notes.as_deref(),
+        new.quality
+    )
+    .fetch_one(exec)
+    .await
+}
 
 async fn enforce_kind(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,

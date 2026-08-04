@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod core;
 pub mod heartrate;
+pub mod import;
 pub mod links;
 pub mod openapi;
 pub mod running;
@@ -56,6 +57,7 @@ pub fn build_router(state: AppState) -> Router {
 
     let bearer_routes = Router::new()
         .route("/runs/gpx", routing::post(runs::upload_gpx))
+        .route("/import/sessions", routing::post(import::import))
         .route("/links", routing::post(links::create))
         .route("/links/{code}", routing::get(links::poll))
         .layer(bearer_layer);
