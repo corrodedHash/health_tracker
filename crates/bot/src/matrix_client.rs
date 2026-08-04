@@ -1,10 +1,10 @@
 //! `MatrixClient` trait — the mock boundary between the bot's sync loop
 //! and the matrix-sdk (item 5.25).
 //!
-//! The real impl wraps `matrix-sdk` and yields two kinds of events: GPX
-//! file bytes received in any joined room, and `link` commands from users.
-//! The test impl returns fixture events so the sync loop can be exercised
-//! without a live Matrix connection.
+//! The real impl wraps `matrix-sdk` and yields three kinds of events: GPX
+//! file bytes received in any joined room, `link` commands from users, and
+//! replies to mentions. The test impl returns fixture events so the sync
+//! loop can be exercised without a live Matrix connection.
 
 use std::path::Path;
 
@@ -14,14 +14,18 @@ use matrix_sdk::{
     config::SyncSettings,
     media::{MediaFormat, MediaRequestParameters},
     ruma::{
-        EventId, OwnedEventId, OwnedRoomId, OwnedUserId, RoomId,
+        EventId, MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedRoomId, OwnedUserId, RoomId,
+        UserId,
+        api::client::relations::get_relating_events_with_rel_type_and_event_type,
         events::{
+            AnyMessageLikeEvent, TimelineEventType,
             reaction::ReactionEventContent,
-            relation::{Annotation, InReplyTo},
+            relation::{Annotation, InReplyTo, RelationType, Thread},
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{
-                    MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                    FileMessageEventContent, MessageType, OriginalSyncRoomMessageEvent, Relation,
+                    RoomMessageEventContent,
                 },
             },
         },
@@ -31,6 +35,11 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 
 use crate::matrix_auth::{MatrixLoginConfig, get_client};
+
+const SEEN_REACTION_KEY: &str = "👀";
+const RESPONSE_WINDOW_MILLIS: u64 = 24 * 60 * 60 * 1000;
+const COMMAND_REPLY_TEXT: &str =
+    "I do not understand that command, but I am awaiting your next GPX file.";
 
 #[derive(Debug, Clone)]
 pub struct GpxFileMetadata {
@@ -102,8 +111,8 @@ pub struct MatrixSdkClient {
 }
 
 impl MatrixSdkClient {
-    /// Build a Matrix client that yields GPX files and `link` commands
-    /// received in joined rooms.
+    /// Build a Matrix client that yields GPX files, `link` commands and
+    /// replies to mentions received in joined rooms.
     ///
     /// # Errors
     /// Returns an error if the Matrix client cannot be built, the login
@@ -280,65 +289,177 @@ async fn on_room_message(
         return;
     }
 
-    match event.content.msgtype {
+    match &event.content.msgtype {
         MessageType::File(file_content) => {
-            let filename = file_content.filename().to_owned();
-            if !std::path::Path::new(&filename)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
-            {
-                return;
-            }
-
-            let bytes = match client
-                .media()
-                .get_media_content(
-                    &MediaRequestParameters {
-                        source: file_content.source,
-                        format: MediaFormat::File,
-                    },
-                    false,
-                )
-                .await
-            {
-                Ok(b) => b,
-                Err(e) => {
-                    tracing::error!("Failed to download file {filename}: {e}");
-                    return;
-                }
-            };
-
-            tracing::info!("Received GPX file: {filename}");
-            let _ = tx
-                .lock()
-                .await
-                .send(BotEvent::GpxFile {
-                    bytes,
-                    metadata: GpxFileMetadata {
-                        filename,
-                        sender: event.sender,
+            handle_gpx_file(
+                file_content,
+                &room,
+                &client,
+                &tx,
+                &event.sender,
+                &event.event_id,
+            )
+            .await;
+        }
+        MessageType::Text(text_content) => {
+            if is_link_command(&text_content.body, user_id.as_str()) {
+                tracing::info!("Link command from {}", event.sender);
+                let _ = tx
+                    .lock()
+                    .await
+                    .send(BotEvent::LinkRequest {
+                        sender: event.sender.clone(),
                         room_id: room.room_id().to_owned(),
                         event_id: event.event_id.clone(),
-                    },
-                })
-                .await;
-        }
-        MessageType::Text(text_content)
-            if is_link_command(&text_content.body, user_id.as_str()) =>
-        {
-            tracing::info!("Link command from {}", event.sender);
-            let _ = tx
-                .lock()
-                .await
-                .send(BotEvent::LinkRequest {
-                    sender: event.sender,
-                    room_id: room.room_id().to_owned(),
-                    event_id: event.event_id.clone(),
-                })
-                .await;
+                    })
+                    .await;
+            } else {
+                handle_text_mention(&client, &room, &event, user_id).await;
+            }
         }
         _ => {}
     }
+}
+
+/// Downloads a `.gpx` file message and forwards it to the sync loop.
+async fn handle_gpx_file(
+    file_content: &FileMessageEventContent,
+    room: &Room,
+    client: &Client,
+    tx: &BotEventSenderCtx,
+    sender: &OwnedUserId,
+    event_id: &OwnedEventId,
+) {
+    let filename = file_content.filename().to_owned();
+    if !Path::new(&filename)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
+    {
+        return;
+    }
+
+    let bytes = match client
+        .media()
+        .get_media_content(
+            &MediaRequestParameters {
+                source: file_content.source.clone(),
+                format: MediaFormat::File,
+            },
+            false,
+        )
+        .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("Failed to download file {filename}: {e}");
+            return;
+        }
+    };
+
+    tracing::info!("Received GPX file: {filename}");
+    let _ = tx
+        .lock()
+        .await
+        .send(BotEvent::GpxFile {
+            bytes,
+            metadata: GpxFileMetadata {
+                filename,
+                sender: sender.clone(),
+                room_id: room.room_id().to_owned(),
+                event_id: event_id.clone(),
+            },
+        })
+        .await;
+}
+
+async fn handle_text_mention(
+    client: &Client,
+    room: &Room,
+    event: &OriginalSyncRoomMessageEvent,
+    bot_id: &UserId,
+) {
+    if !is_mentioned(event, bot_id) {
+        return;
+    }
+
+    if !within_response_window(event.origin_server_ts) {
+        tracing::info!("Ignoring {}: outside 24h response window", event.event_id);
+        return;
+    }
+
+    if already_seen(client, room, &event.event_id).await {
+        tracing::info!("Ignoring {}: already acknowledged", event.event_id);
+        return;
+    }
+
+    if let Err(e) = room.send(build_command_reply(event)).await {
+        tracing::error!("Failed to send command reply in {}: {e}", room.room_id());
+        return;
+    }
+
+    if let Err(e) = room
+        .send(ReactionEventContent::new(Annotation::new(
+            event.event_id.clone(),
+            SEEN_REACTION_KEY.to_owned(),
+        )))
+        .await
+    {
+        tracing::error!("Failed to send seen reaction: {e}");
+    }
+}
+
+fn is_mentioned(event: &OriginalSyncRoomMessageEvent, bot_id: &UserId) -> bool {
+    event
+        .content
+        .mentions
+        .as_ref()
+        .is_some_and(|mentions| mentions.user_ids.iter().any(|id| id == bot_id))
+}
+
+fn within_response_window(ts: MilliSecondsSinceUnixEpoch) -> bool {
+    let now = MilliSecondsSinceUnixEpoch::now().get();
+    let sent = ts.get();
+    u64::from(now).saturating_sub(u64::from(sent)) <= RESPONSE_WINDOW_MILLIS
+}
+
+async fn already_seen(client: &Client, room: &Room, event_id: &EventId) -> bool {
+    let request = get_relating_events_with_rel_type_and_event_type::v1::Request::new(
+        room.room_id().to_owned(),
+        event_id.to_owned(),
+        RelationType::Annotation,
+        TimelineEventType::Reaction,
+    );
+
+    let Ok(response) = client.send(request).await else {
+        return false;
+    };
+
+    for raw in response.chunk {
+        let Ok(AnyMessageLikeEvent::Reaction(reaction)) = raw.deserialize() else {
+            continue;
+        };
+        let Some(original) = reaction.as_original() else {
+            continue;
+        };
+        if original.content.relates_to.key == SEEN_REACTION_KEY {
+            return true;
+        }
+    }
+    false
+}
+
+fn build_command_reply(event: &OriginalSyncRoomMessageEvent) -> RoomMessageEventContent {
+    let root_event_id = match &event.content.relates_to {
+        Some(Relation::Thread(thread)) => thread.event_id.clone(),
+        _ => event.event_id.clone(),
+    };
+
+    let mut content = RoomMessageEventContent::text_plain(COMMAND_REPLY_TEXT);
+    content.relates_to = Some(Relation::Thread(Thread::reply(
+        root_event_id,
+        event.event_id.clone(),
+    )));
+    content
 }
 
 /// Whether a message body is a `link` command — bare `link`, `!link`, or
@@ -351,4 +472,124 @@ fn is_link_command(body: &str, bot_user_id: &str) -> bool {
         .unwrap_or(without_bang)
         .trim();
     without_mention.eq_ignore_ascii_case("link")
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, unsafe_code)]
+
+    use std::time::UNIX_EPOCH;
+
+    use matrix_sdk::ruma::{
+        MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedUserId,
+        events::{
+            Mentions, MessageLikeUnsigned,
+            relation::Thread,
+            room::message::{
+                MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                RoomMessageEventContentWithoutRelation,
+            },
+        },
+    };
+
+    use super::{
+        COMMAND_REPLY_TEXT, build_command_reply, is_link_command, is_mentioned,
+        within_response_window,
+    };
+
+    fn user_id(id: &str) -> OwnedUserId {
+        id.try_into().unwrap()
+    }
+
+    fn event_id(id: &str) -> OwnedEventId {
+        id.try_into().unwrap()
+    }
+
+    fn event(
+        id: &str,
+        mentions: Option<Mentions>,
+        relates_to: Option<Relation<RoomMessageEventContentWithoutRelation>>,
+    ) -> OriginalSyncRoomMessageEvent {
+        let mut content = RoomMessageEventContent::text_plain("hello");
+        content.mentions = mentions;
+        content.relates_to = relates_to;
+        OriginalSyncRoomMessageEvent {
+            content,
+            event_id: event_id(id),
+            sender: user_id("@alice:localhost"),
+            origin_server_ts: MilliSecondsSinceUnixEpoch::now(),
+            unsigned: MessageLikeUnsigned::new(),
+        }
+    }
+
+    #[test]
+    fn mentions_detect_the_bot() {
+        let mentioned = event(
+            "$m1",
+            Some(Mentions::with_user_ids(vec![user_id("@bot:localhost")])),
+            None,
+        );
+        assert!(is_mentioned(&mentioned, &user_id("@bot:localhost")));
+        assert!(!is_mentioned(&mentioned, &user_id("@someone:localhost")));
+    }
+
+    #[test]
+    fn room_mentions_do_not_trigger() {
+        let room_mentioned = event("$m2", Some(Mentions::with_room_mention()), None);
+        assert!(!is_mentioned(&room_mentioned, &user_id("@bot:localhost")));
+    }
+
+    #[test]
+    fn messages_without_mentions_do_not_trigger() {
+        let plain = event("$m3", None, None);
+        assert!(!is_mentioned(&plain, &user_id("@bot:localhost")));
+    }
+
+    #[test]
+    fn fresh_and_old_messages_are_handled_by_the_window() {
+        assert!(within_response_window(MilliSecondsSinceUnixEpoch::now()));
+        let ancient = MilliSecondsSinceUnixEpoch::from_system_time(UNIX_EPOCH).unwrap();
+        assert!(!within_response_window(ancient));
+    }
+
+    #[test]
+    fn reply_starts_a_new_thread_rooted_at_the_message() {
+        let message = event("$msg1", None, None);
+        let content = build_command_reply(&message);
+        let MessageType::Text(text) = content.msgtype else {
+            panic!("expected text reply");
+        };
+        assert_eq!(text.body, COMMAND_REPLY_TEXT);
+        let Relation::Thread(thread) = content.relates_to.expect("reply must be threaded") else {
+            panic!("expected thread relation");
+        };
+        assert_eq!(thread.event_id, event_id("$msg1"));
+    }
+
+    #[test]
+    fn reply_continues_an_existing_thread() {
+        let message = event(
+            "$msg2",
+            None,
+            Some(Relation::Thread(Thread::plain(
+                event_id("$root"),
+                event_id("$msg2"),
+            ))),
+        );
+        let content = build_command_reply(&message);
+        let Relation::Thread(thread) = content.relates_to.expect("reply must be threaded") else {
+            panic!("expected thread relation");
+        };
+        assert_eq!(thread.event_id, event_id("$root"));
+    }
+
+    #[test]
+    fn link_commands_are_detected_with_and_without_prefixes() {
+        assert!(is_link_command("link", "@bot:localhost"));
+        assert!(is_link_command("!link", "@bot:localhost"));
+        assert!(is_link_command("@bot:localhost link", "@bot:localhost"));
+        assert!(is_link_command("Link", "@bot:localhost"));
+        assert!(!is_link_command("linking", "@bot:localhost"));
+        assert!(!is_link_command("hello", "@bot:localhost"));
+    }
 }
