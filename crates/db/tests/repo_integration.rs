@@ -17,7 +17,8 @@ use health_core::{
 };
 use health_db::{
     ApiTokenRepository, CoreRepository, DbError, HeartrateRepository, OidcStateRepository,
-    RunningRepository, SessionsRepository, SqlxRepository, UsersRepository, WeightRepository,
+    RunningRepository, SessionChild, SessionsRepository, SqlxRepository, UsersRepository,
+    WeightRepository,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -71,6 +72,73 @@ async fn sessions_insert_get_list_delete(pool: PgPool) {
 
     assert!(SessionsRepository::delete(&r, session.id).await.unwrap());
     assert!(SessionsRepository::get(&r, session.id).await.is_err());
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_session_with_child_commits_both_rows(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let child = SessionChild::Weight(WeightSession {
+        session_id: Uuid::nil(),
+        weight_g: 80_000,
+        sets: 3,
+    });
+    let s = r
+        .insert_session_with_child(uid, &new_session(ExerciseKind::Weight), Some(child))
+        .await
+        .unwrap();
+    assert_eq!(s.kind, ExerciseKind::Weight);
+
+    let back = WeightRepository::get_by_session(&r, s.id).await.unwrap();
+    assert_eq!(back.weight_g, 80_000);
+    assert_eq!(back.sets, 3);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_session_with_child_running_and_gpx(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let blob = b"<gpx></gpx>".to_vec();
+    let child = SessionChild::Running(RunningSession {
+        session_id: Uuid::nil(),
+        distance_m: 5_000,
+        moving_distance_m: Some(4_800),
+        moving_time: Some(1800.0),
+        gpx_data: Some(blob.clone()),
+    });
+    let s = r
+        .insert_session_with_child(uid, &new_session(ExerciseKind::Running), Some(child))
+        .await
+        .unwrap();
+
+    let back = RunningRepository::get_by_session(&r, s.id).await.unwrap();
+    assert_eq!(back.distance_m, 5_000);
+    let gpx = RunningRepository::get_gpx(&r, s.id).await.unwrap();
+    assert_eq!(gpx.as_deref(), Some(blob.as_slice()));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_session_with_child_rolls_back_on_kind_mismatch(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let child = SessionChild::Weight(WeightSession {
+        session_id: Uuid::nil(),
+        weight_g: 80_000,
+        sets: 3,
+    });
+    let err = r
+        .insert_session_with_child(uid, &new_session(ExerciseKind::Core), Some(child))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DbError::KindMismatch { .. }));
+
+    let listed = SessionsRepository::list(&r, uid, None, None, None, None, None)
+        .await
+        .unwrap();
+    assert!(listed.is_empty());
 }
 
 #[sqlx::test(migrations = "../../migrations")]

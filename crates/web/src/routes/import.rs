@@ -13,11 +13,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use health_core::{
-    CoreSession, ExerciseKind, ExerciseSession, NewExerciseSession, RunningSession, WeightSession,
+    ExerciseKind, ExerciseSession, NewExerciseSession, RunningSession, WeightSession,
 };
-use health_db::{
-    CoreRepository, RunningRepository, SessionsRepository, SqlxRepository, WeightRepository,
-};
+use health_db::{SessionChild, SqlxRepository};
 
 use crate::error::WebError;
 use crate::middleware::session::UserId;
@@ -92,7 +90,7 @@ async fn import_row(
     };
     new_session.validate().map_err(|e| e.to_string())?;
 
-    match new_session.kind {
+    let child = match new_session.kind {
         ExerciseKind::Weight => {
             let weight_g = row.weight_g.ok_or("kind=weight requires weight_g")?;
             let sets = row.sets.ok_or("kind=weight requires sets")?;
@@ -102,34 +100,9 @@ async fn import_row(
                 sets,
             };
             weight.validate().map_err(|e| e.to_string())?;
-
-            let session = SessionsRepository::insert(repo, user_id, &new_session)
-                .await
-                .map_err(|e| e.to_string())?;
-            let weight = WeightSession {
-                session_id: session.id,
-                weight_g,
-                sets,
-            };
-            if let Err(e) = WeightRepository::insert(repo, session.id, &weight).await {
-                rollback(repo, session.id).await;
-                return Err(e.to_string());
-            }
-            Ok(session)
+            Some(SessionChild::Weight(weight))
         }
-        ExerciseKind::Core => {
-            let session = SessionsRepository::insert(repo, user_id, &new_session)
-                .await
-                .map_err(|e| e.to_string())?;
-            let core = CoreSession {
-                session_id: session.id,
-            };
-            if let Err(e) = CoreRepository::insert(repo, session.id, &core).await {
-                rollback(repo, session.id).await;
-                return Err(e.to_string());
-            }
-            Ok(session)
-        }
+        ExerciseKind::Core => Some(SessionChild::Core),
         ExerciseKind::Running => {
             let distance_m = row.distance_m.ok_or("kind=running requires distance_m")?;
             let running = RunningSession {
@@ -140,32 +113,12 @@ async fn import_row(
                 gpx_data: None,
             };
             running.validate().map_err(|e| e.to_string())?;
-
-            let session = SessionsRepository::insert(repo, user_id, &new_session)
-                .await
-                .map_err(|e| e.to_string())?;
-            let running = RunningSession {
-                session_id: session.id,
-                distance_m,
-                moving_distance_m: None,
-                moving_time: None,
-                gpx_data: None,
-            };
-            if let Err(e) = RunningRepository::insert(repo, session.id, &running).await {
-                rollback(repo, session.id).await;
-                return Err(e.to_string());
-            }
-            Ok(session)
+            Some(SessionChild::Running(running))
         }
-        ExerciseKind::Custom => SessionsRepository::insert(repo, user_id, &new_session)
-            .await
-            .map_err(|e| e.to_string()),
-    }
-}
+        ExerciseKind::Custom => None,
+    };
 
-/// Best-effort removal of the just-inserted parent row when the child insert
-/// fails, so a failed row leaves no orphan behind (FK cascade removes the
-/// child if one was partially written).
-async fn rollback(repo: &SqlxRepository, session_id: Uuid) {
-    let _ = SessionsRepository::delete(repo, session_id).await;
+    repo.insert_session_with_child(user_id, &new_session, child)
+        .await
+        .map_err(|e| e.to_string())
 }
