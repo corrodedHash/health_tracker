@@ -4,6 +4,7 @@ use health_core::{ApiToken, ExerciseKind, ExerciseSession, NewApiToken, NewExerc
 
 use super::auth;
 use super::heartrate;
+use super::import;
 use super::links;
 use super::runs;
 use super::sessions;
@@ -29,6 +30,7 @@ pub(super) struct ErrorResponse {
         sessions::get,
         sessions::delete,
         heartrate::add,
+        import::import,
         runs::upload_gpx,
         runs::get_gpx,
         tokens::issue,
@@ -51,6 +53,7 @@ pub(super) struct ErrorResponse {
         sessions::ListParams,
         heartrate::HeartrateBody,
         heartrate::HeartrateSamplePayload,
+        import::ImportRow,
         tokens::IssueTokenBody,
         links::NewPendingLink,
         links::LinkPollResponse,
@@ -60,6 +63,7 @@ pub(super) struct ErrorResponse {
     tags(
         (name = "sessions", description = "Exercise session CRUD"),
         (name = "heartrate", description = "Heartrate time-series data"),
+        (name = "import", description = "Batch exercise import"),
         (name = "runs", description = "GPX upload and retrieval"),
         (name = "tokens", description = "API token management"),
         (name = "links", description = "Bot account-link flow"),
