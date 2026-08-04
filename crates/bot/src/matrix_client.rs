@@ -22,7 +22,8 @@ use matrix_sdk::{
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{
-                    MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                    FileMessageEventContent, MessageType, OriginalSyncRoomMessageEvent, Relation,
+                    RoomMessageEventContent,
                 },
             },
         },
@@ -253,48 +254,59 @@ async fn on_room_message(
     match &event.content.msgtype {
         MessageType::Text(_) => handle_text_mention(&client, &room, &event, user_id).await,
         MessageType::File(file_content) => {
-            let filename = file_content.filename().to_owned();
-            if !std::path::Path::new(&filename)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
-            {
-                return;
-            }
-
-            let bytes = match client
-                .media()
-                .get_media_content(
-                    &MediaRequestParameters {
-                        source: file_content.source.clone(),
-                        format: MediaFormat::File,
-                    },
-                    false,
-                )
-                .await
-            {
-                Ok(b) => b,
-                Err(e) => {
-                    tracing::error!("Failed to download file {filename}: {e}");
-                    return;
-                }
-            };
-
-            tracing::info!("Received GPX file: {filename}");
-            let _ = tx
-                .lock()
-                .await
-                .send((
-                    bytes,
-                    GpxFileMetadata {
-                        filename,
-                        room_id: room.room_id().to_owned(),
-                        event_id: event.event_id.clone(),
-                    },
-                ))
-                .await;
+            handle_gpx_file(file_content, &room, &client, &tx, &event.event_id).await;
         }
         _ => {}
     }
+}
+
+/// Downloads a `.gpx` file message and forwards it to the sync loop.
+async fn handle_gpx_file(
+    file_content: &FileMessageEventContent,
+    room: &Room,
+    client: &Client,
+    tx: &GpxSenderCtx,
+    event_id: &OwnedEventId,
+) {
+    let filename = file_content.filename().to_owned();
+    if !Path::new(&filename)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
+    {
+        return;
+    }
+
+    let bytes = match client
+        .media()
+        .get_media_content(
+            &MediaRequestParameters {
+                source: file_content.source.clone(),
+                format: MediaFormat::File,
+            },
+            false,
+        )
+        .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("Failed to download file {filename}: {e}");
+            return;
+        }
+    };
+
+    tracing::info!("Received GPX file: {filename}");
+    let _ = tx
+        .lock()
+        .await
+        .send((
+            bytes,
+            GpxFileMetadata {
+                filename,
+                room_id: room.room_id().to_owned(),
+                event_id: event_id.clone(),
+            },
+        ))
+        .await;
 }
 
 async fn handle_text_mention(
