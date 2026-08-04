@@ -9,6 +9,16 @@ Two auth modes (both require --token):
                   given token, the user confirms it in a browser, and the script
                   polls for a freshly issued per-user token to import with.
 
+Two input modes:
+  csv_import.py [options] workouts.csv
+                  Batch-import session rows from a CSV. Running rows with a
+                  `gpx` column upload the file via POST /api/runs/gpx (all
+                  values are derived from the GPX itself).
+  csv_import.py [options] run1.gpx run2.gpx
+                  Upload one or more GPX files directly via POST /api/runs/gpx.
+                  No CSV needed — started_at, duration, distance and moving
+                  time are all extracted from each file by the server.
+
 Dates are preserved from the CSV: every row's `started_at` is sent verbatim
 (parsed, then converted to UTC), so nothing is stored as "today".
 
@@ -33,6 +43,7 @@ CSV columns (header names are case-insensitive, aliases accepted):
 
 Example:
   csv_import.py --api-base http://localhost:3000 --token $TOKEN workouts.csv
+  csv_import.py --api-base http://localhost:3000 --token $TOKEN run1.gpx run2.gpx
   csv_import.py --api-base http://localhost:3000 --link workouts.csv
 """
 
@@ -256,15 +267,16 @@ def build_rows(reader, mapping, args, csv_dir):
     return import_rows, gpx_tasks, skipped
 
 
-def upload_gpx(base, token, row_number, gpx_path):
+def upload_gpx(base, token, gpx_path, label=None):
     raw = gpx_path.read_bytes()
     status, resp = http_request(
         base, "POST", "/api/runs/gpx", token=token,
         raw=raw, content_type="application/gpx+xml",
     )
+    prefix = f"{label}: " if label else f"{gpx_path}: "
     if status != 200:
-        return f"row {row_number}: GPX upload failed ({status}): {resp}"
-    return f"row {row_number}: created running session {resp['id']} (started {resp['started_at']})"
+        return f"{prefix}GPX upload failed ({status}): {resp}"
+    return f"{prefix}created running session {resp['id']} (started {resp['started_at']})"
 
 
 def import_sessions(base, token, rows, batch_size):
@@ -293,7 +305,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="See the module docstring above the CSV column reference.",
     )
-    parser.add_argument("csv", help="path to the CSV file")
+    parser.add_argument("inputs", nargs="+",
+                        help="path to a CSV, or one or more .gpx files to upload "
+                             "directly via POST /api/runs/gpx (all run data is "
+                             "extracted from each GPX by the server)")
     parser.add_argument("--api-base", default="http://localhost:3000",
                         help="web API base URL (default: %(default)s)")
     parser.add_argument("--token",
@@ -314,13 +329,35 @@ def main():
     parser.add_argument("--delimiter", default=",",
                         help="CSV delimiter (default: ',')")
     parser.add_argument("--dry-run", action="store_true",
-                        help="parse and validate rows without calling the API")
+                        help="parse and validate inputs without calling the API")
     args = parser.parse_args()
 
     if not args.dry_run and not args.token:
         parser.error("--token is required (unless --dry-run)")
 
-    csv_path = Path(args.csv)
+    gpx_paths = []
+    csv_inputs = []
+    for inp in args.inputs:
+        path = Path(inp)
+        (gpx_paths if path.suffix.lower() == ".gpx" else csv_inputs).append(path)
+    if csv_inputs and gpx_paths:
+        die("cannot mix a CSV file with direct GPX files in one run")
+    if len(csv_inputs) > 1:
+        die("only one CSV input is supported")
+
+    if gpx_paths:
+        import_direct_gpx(args, gpx_paths)
+    else:
+        import_csv(args, csv_inputs[0])
+
+
+def acquire_token(args):
+    if args.link:
+        return run_link_flow(args.api_base, args.token, args.link_poll_seconds, args.link_timeout)
+    return args.token
+
+
+def import_csv(args, csv_path):
     if not csv_path.is_file():
         die(f"CSV file not found: {csv_path}")
     csv_dir = csv_path.parent
@@ -349,22 +386,39 @@ def main():
             print(f"  would upload GPX {gpx_path} (row {row_number})")
         return
 
-    if args.link:
-        token = run_link_flow(args.api_base, args.token, args.link_poll_seconds, args.link_timeout)
-    else:
-        token = args.token
-
+    token = acquire_token(args)
     lines = []
     for row_number, gpx_path in gpx_tasks:
-        lines.append(upload_gpx(args.api_base, token, row_number, gpx_path))
+        lines.append(upload_gpx(args.api_base, token, gpx_path, label=f"row {row_number}"))
     lines.extend(import_sessions(args.api_base, token, import_rows, args.batch_size))
+    print_lines_and_exit(lines, len(import_rows) + len(gpx_tasks))
 
+
+def import_direct_gpx(args, gpx_paths):
+    missing = [p for p in gpx_paths if not p.is_file()]
+    if missing:
+        die(f"gpx file not found: {', '.join(str(p) for p in missing)}")
+
+    print(f"parsed {len(gpx_paths)} gpx file(s)")
+
+    if args.dry_run:
+        print("dry-run: no API calls made")
+        for gpx_path in gpx_paths:
+            print(f"  would upload GPX {gpx_path}")
+        return
+
+    token = acquire_token(args)
+    lines = [upload_gpx(args.api_base, token, path) for path in gpx_paths]
+    print_lines_and_exit(lines, len(gpx_paths))
+
+
+def print_lines_and_exit(lines, total):
     for line in lines:
         print(line)
 
     failed = sum(1 for line in lines if "failed" in line or "error" in line)
     if failed:
-        print(f"\n{failed} item(s) failed; {len(import_rows) + len(gpx_tasks) - failed} succeeded.",
+        print(f"\n{failed} item(s) failed; {total - failed} succeeded.",
               file=sys.stderr)
         sys.exit(1)
 
