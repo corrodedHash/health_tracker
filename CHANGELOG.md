@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.6.0...health-tracker-v0.7.0) (2026-08-14)
+
+
+### Features
+
+* **bot:** respond to mentions with thread reply and seen-reaction dedup ([#57](https://github.com/corrodedHash/health_tracker/issues/57)) ([afd1433](https://github.com/corrodedHash/health_tracker/commit/afd1433a3ab40eca41eaf92beb662be9c682c16d))
+* CSV and GPX exercise import (API token auth) ([#67](https://github.com/corrodedHash/health_tracker/issues/67)) ([e548d64](https://github.com/corrodedHash/health_tracker/commit/e548d644f3687c237833e0c771f412d75e1b349b))
+* **db:** dedupe GPX uploads by content hash (Phase 1) ([#58](https://github.com/corrodedHash/health_tracker/issues/58)) ([efd7c73](https://github.com/corrodedHash/health_tracker/commit/efd7c736ac76886b080ea4232b8adb20be51f145))
+* per-matrix-user account linking for the bot ([#59](https://github.com/corrodedHash/health_tracker/issues/59)) ([b0d72a4](https://github.com/corrodedHash/health_tracker/commit/b0d72a42e51ac50cb6582b2fa5dd97459acbbbcb))
+
+
+### Bug Fixes
+
+* **dev:** per-branch DB creation and hk workspace resolution ([#66](https://github.com/corrodedHash/health_tracker/issues/66)) ([7f222e4](https://github.com/corrodedHash/health_tracker/commit/7f222e49f58cdae4756235f5defebde19784ad02))
+* make cargo tasks cover all workspace crates ([#60](https://github.com/corrodedHash/health_tracker/issues/60)) ([c944b23](https://github.com/corrodedHash/health_tracker/commit/c944b23193f7baa4ff83bf72a49ad1ad250abd10))
+
 ## [0.6.0](https://github.com/corrodedHash/health_tracker/compare/health-tracker-v0.5.0...health-tracker-v0.6.0) (2026-08-02)
 
 
