@@ -67,6 +67,7 @@
 #   HEALTH__MATRIX__USER_ID        matrix.user_id        Yes       Bot Matrix user ID
 #   HEALTH__MATRIX__PASSWORD       matrix.password       Yes       Bot password
 #   HEALTH__MATRIX__SESSION_FILE   matrix.session_file   No        Default "session.toml"
+#   HEALTH__MATRIX__SYNC_TOKEN     matrix.sync_token     No        Default "sync-token.txt"
 #   HEALTH__API__BASE_URL          api.base_url          No        Default "http://localhost:3000"
 #   HEALTH__API__TOKEN             api.token             Yes       Service bearer token for health-web API
 #   HEALTH__API__LINKS_FILE        api.links_file        No        Default "links.toml" — matrix-user → token mapping
@@ -79,6 +80,7 @@
 # user_id = "@health-bot:matrix.example.com"
 # password = "matrix-bot-password"
 # session_file = "session.toml"
+# sync_token = "sync-token.txt"
 #
 # [api]
 # base_url = "https://health.example.com"
@@ -90,6 +92,7 @@
 #   export HEALTH__MATRIX__USER_ID="@health-bot:matrix.example.com"
 #   export HEALTH__MATRIX__PASSWORD="matrix-bot-password"
 #   export HEALTH__MATRIX__SESSION_FILE="session.toml"
+#   export HEALTH__MATRIX__SYNC_TOKEN="sync-token.txt"
 #   export HEALTH__API__BASE_URL="https://health.example.com"
 #   export HEALTH__API__TOKEN="ht-api-token"
 #

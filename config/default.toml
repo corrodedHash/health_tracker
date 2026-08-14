@@ -1,6 +1,7 @@
 [matrix]
 homeserver = "https://matrix.org"
 session_file = "session.toml"
+sync_token = "sync-token.txt"
 
 [api]
 base_url = "http://localhost:3000"

@@ -19,13 +19,14 @@ use health_core::{
 };
 use rand::RngCore;
 use sha2::{Digest, Sha256};
+use sqlx::PgConnection;
 use sqlx::PgPool;
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
 use crate::error::DbError;
 use crate::traits::{
-    ApiTokenRepository, CoreRepository, HeartrateRepository, OidcStateRepository,
+    ApiTokenRepository, CoreRepository, HeartrateRepository, InsertRunOutcome, OidcStateRepository,
     PendingLinkRepository, RunningRepository, SessionsRepository, UsersRepository,
     WeightRepository,
 };
@@ -755,6 +756,101 @@ impl RunningRepository for SqlxRepository {
             Some(r) => Ok(r.gpx_data),
         }
     }
+
+    async fn insert_run_with_gpx(
+        &self,
+        user_id: Uuid,
+        new: &NewExerciseSession,
+        running: &RunningSession,
+    ) -> Result<InsertRunOutcome, DbError> {
+        // GPX-less runs cannot be deduplicated by content — insert plainly.
+        let Some(gpx_bytes) = running.gpx_data.as_deref() else {
+            let session = SessionsRepository::insert(self, user_id, new).await?;
+            RunningRepository::insert(self, session.id, running).await?;
+            return Ok(InsertRunOutcome::Created(session));
+        };
+
+        let hash = sha256_hex(gpx_bytes);
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(existing_id) = find_duplicate_run(
+            &mut tx,
+            user_id,
+            new.started_at,
+            running.distance_m,
+            &hash,
+            gpx_bytes,
+        )
+        .await?
+        {
+            tx.rollback().await?;
+            let session = SessionsRepository::get(self, existing_id).await?;
+            return Ok(InsertRunOutcome::Duplicate(session));
+        }
+
+        let row = sqlx::query_as!(
+            SessionRow,
+            "INSERT INTO exercises (user_id, kind, started_at, duration, notes, quality) \
+              VALUES ($1, $2, $3, $4, $5, $6) \
+              RETURNING id, user_id, kind, started_at, duration, notes, quality, created_at",
+            user_id,
+            new.kind.as_str(),
+            new.started_at,
+            std_to_interval(new.duration),
+            new.notes.as_deref(),
+            new.quality
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_err)?;
+        let session: ExerciseSession = row.try_into()?;
+
+        let child = sqlx::query!(
+            "INSERT INTO exercise_running \
+                (session_id, user_id, distance_m, moving_distance_m, moving_time, gpx_data, gpx_sha256) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            session.id,
+            user_id,
+            running.distance_m,
+            running.moving_distance_m,
+            running.moving_time,
+            gpx_bytes,
+            &hash
+        )
+        .execute(&mut *tx)
+        .await;
+
+        match child {
+            Ok(_) => {
+                tx.commit().await?;
+                Ok(InsertRunOutcome::Created(session))
+            }
+            Err(e) => {
+                let mapped = map_err(e);
+                // Unique-violation on gpx_sha256 means a concurrent upload
+                // won the race; the tx rollback undoes our parent insert.
+                let is_conflict = matches!(&mapped, DbError::Conflict(_));
+                tx.rollback().await?;
+                if is_conflict {
+                    let mut conn = self.pool.acquire().await?;
+                    if let Some(existing_id) = find_duplicate_run(
+                        &mut conn,
+                        user_id,
+                        new.started_at,
+                        running.distance_m,
+                        &hash,
+                        gpx_bytes,
+                    )
+                    .await?
+                    {
+                        let session = SessionsRepository::get(self, existing_id).await?;
+                        return Ok(InsertRunOutcome::Duplicate(session));
+                    }
+                }
+                Err(mapped)
+            }
+        }
+    }
 }
 
 // ===========================================================================
@@ -1034,6 +1130,59 @@ impl PendingLinkRepository for SqlxRepository {
 // since Postgres CHECK cannot reference other tables.
 // ===========================================================================
 
+/// ±1% tolerance on `distance_m` for the same-second dedup sanity check,
+/// catching near-duplicates whose bytes differ (re-encoded/reformatted
+/// GPX files).
+const SAME_SECOND_DISTANCE_TOLERANCE: f64 = 0.01;
+
+/// Find an existing run for `user_id` whose GPX content already matches.
+///
+/// Primary check is the `gpx_sha256` content hash, with a byte-comparison
+/// fallback for legacy rows that predate the hash column (`gpx_sha256 IS
+/// NULL`). If both miss, a same-second + ±1% `distance_m` match catches
+/// reformatted files that hash differently.
+async fn find_duplicate_run(
+    conn: &mut PgConnection,
+    user_id: Uuid,
+    started_at: chrono::DateTime<chrono::Utc>,
+    distance_m: i32,
+    hash: &str,
+    gpx_data: &[u8],
+) -> Result<Option<Uuid>, DbError> {
+    let row = sqlx::query!(
+        "SELECT e.id FROM exercises e \
+         JOIN exercise_running r ON r.session_id = e.id \
+         WHERE e.user_id = $1 AND e.kind = 'running' \
+           AND (r.gpx_sha256 = $2 OR (r.gpx_sha256 IS NULL AND r.gpx_data = $3)) \
+         LIMIT 1",
+        user_id,
+        hash,
+        gpx_data
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    if let Some(r) = row {
+        return Ok(Some(r.id));
+    }
+
+    let lo = f64::from(distance_m) * (1.0 - SAME_SECOND_DISTANCE_TOLERANCE);
+    let hi = f64::from(distance_m) * (1.0 + SAME_SECOND_DISTANCE_TOLERANCE);
+    let row = sqlx::query!(
+        "SELECT e.id FROM exercises e \
+         JOIN exercise_running r ON r.session_id = e.id \
+         WHERE e.user_id = $1 AND e.kind = 'running' AND e.started_at = $2 \
+           AND r.distance_m::double precision BETWEEN $3 AND $4 \
+         LIMIT 1",
+        user_id,
+        started_at,
+        lo,
+        hi
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.map(|r| r.id))
+}
+
 /// Kind-specific child row inserted atomically with its parent.
 ///
 /// The parent's server-assigned id is used regardless of any
@@ -1088,8 +1237,8 @@ async fn enforce_kind(
     }
 }
 
-fn sha256_hex(input: &str) -> String {
+fn sha256_hex(input: impl AsRef<[u8]>) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
+    hasher.update(input.as_ref());
     hex::encode(hasher.finalize())
 }

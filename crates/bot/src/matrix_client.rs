@@ -10,13 +10,15 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use matrix_sdk::{
-    Client, Room, RoomState,
+    Client, Error, LoopCtrl, Room, RoomState,
     config::SyncSettings,
     media::{MediaFormat, MediaRequestParameters},
     ruma::{
         EventId, MilliSecondsSinceUnixEpoch, OwnedEventId, OwnedRoomId, OwnedUserId, RoomId,
         UserId,
-        api::client::relations::get_relating_events_with_rel_type_and_event_type,
+        api::client::relations::{
+            get_relating_events_with_rel_type, get_relating_events_with_rel_type_and_event_type,
+        },
         events::{
             AnyMessageLikeEvent, TimelineEventType,
             reaction::ReactionEventContent,
@@ -30,6 +32,7 @@ use matrix_sdk::{
             },
         },
     },
+    sync::SyncResponse,
 };
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -102,6 +105,19 @@ pub trait MatrixClient: Send + Sync {
         event_id: &EventId,
         key: &str,
     ) -> anyhow::Result<()>;
+
+    /// Whether the bot has already reacted to `event_id` in `room_id` with
+    /// any of the given reaction keys (e.g. ✅ / ❌).
+    ///
+    /// Used as a client-side idempotency filter: on restart, the bot
+    /// re-sees messages it already processed and skipped them so it does
+    /// not re-upload the GPX.
+    async fn has_own_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        keys: &[&str],
+    ) -> anyhow::Result<bool>;
 }
 
 pub struct MatrixSdkClient {
@@ -114,10 +130,19 @@ impl MatrixSdkClient {
     /// Build a Matrix client that yields GPX files, `link` commands and
     /// replies to mentions received in joined rooms.
     ///
+    /// The initial sync resumes from a previously persisted sync token in
+    /// `sync_token_file` (falling back to a fresh sync when absent), and a
+    /// background loop keeps syncing, persisting each response's `next_batch`
+    /// so a restart does not re-deliver already-seen events.
+    ///
     /// # Errors
     /// Returns an error if the Matrix client cannot be built, the login
     /// fails, or the initial sync does not complete.
-    pub async fn new(login: &MatrixLoginConfig, session_file: &Path) -> anyhow::Result<Self> {
+    pub async fn new(
+        login: &MatrixLoginConfig,
+        session_file: &Path,
+        sync_token_file: &Path,
+    ) -> anyhow::Result<Self> {
         let client = get_client(login, session_file).await?;
 
         client.add_event_handler(on_stripped_state_member);
@@ -128,14 +153,32 @@ impl MatrixSdkClient {
         client.add_event_handler_context(tx.clone());
         client.add_event_handler(on_room_message);
 
-        let sync_token = client.sync_once(SyncSettings::default()).await?.next_batch;
+        let settings = read_sync_token(sync_token_file)
+            .map_or_else(SyncSettings::default, |prev| {
+                SyncSettings::default().token(prev)
+            });
+        let initial_token = client.sync_once(settings).await?.next_batch;
+        if let Err(e) = persist_sync_token(sync_token_file, &initial_token) {
+            tracing::error!(
+                "Failed to persist initial sync token to {}: {e:#}",
+                sync_token_file.display()
+            );
+        }
         tracing::info!("Finished initial Matrix sync");
 
         let sync_client = client.clone();
+        let sync_token_file = sync_token_file.to_owned();
         tokio::spawn(async move {
-            let settings = SyncSettings::default().token(sync_token);
-            if let Err(e) = sync_client.sync(settings).await {
-                tracing::error!("Matrix sync ended with error: {e}");
+            // `sync_with_result_callback` syncs forever; the callback persists
+            // each `next_batch` and swallows errors so the loop survives
+            // transient failures (log-and-continue).
+            if let Err(e) = sync_client
+                .sync_with_result_callback(SyncSettings::default().token(initial_token), |result| {
+                    persist_next_batch(&sync_token_file, result)
+                })
+                .await
+            {
+                tracing::error!("Matrix sync loop ended with error: {e}");
             }
         });
 
@@ -148,6 +191,67 @@ impl MatrixSdkClient {
     pub fn event_sender(&self) -> std::sync::Arc<tokio::sync::Mutex<BotEventSender>> {
         self.tx.clone()
     }
+}
+
+/// Read the persisted sync token, if any. A missing file (or an unreadable
+/// one, logged) falls back to a fresh sync — the server-side dedup makes a
+/// re-sync of recent events safe.
+fn read_sync_token(sync_token_file: &Path) -> Option<String> {
+    match std::fs::read_to_string(sync_token_file) {
+        Ok(token) => {
+            let token = token.trim();
+            if token.is_empty() {
+                None
+            } else {
+                Some(token.to_owned())
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            tracing::error!(
+                "Failed to read sync token from {}: {e:#}",
+                sync_token_file.display()
+            );
+            None
+        }
+    }
+}
+
+/// Write `token` to `sync_token_file`, creating any missing parent
+/// directories.
+///
+/// # Errors
+/// Returns an error if the parent directory cannot be created or the file
+/// cannot be written.
+fn persist_sync_token(sync_token_file: &Path, token: &str) -> anyhow::Result<()> {
+    if let Some(parent) = sync_token_file.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(sync_token_file, token)?;
+    Ok(())
+}
+
+/// `sync_with_result_callback` callback: persist each successful response's
+/// `next_batch` to disk and keep syncing. Errors are logged and swallowed so
+/// the loop keeps going (log-and-continue).
+fn persist_next_batch(
+    sync_token_file: &Path,
+    result: Result<SyncResponse, Error>,
+) -> std::future::Ready<Result<LoopCtrl, Error>> {
+    match result {
+        Ok(response) => {
+            if let Err(e) = persist_sync_token(sync_token_file, &response.next_batch) {
+                tracing::error!(
+                    "Failed to persist sync token to {}: {e:#}",
+                    sync_token_file.display()
+                );
+            }
+        }
+        Err(e) => tracing::error!("Matrix sync ended with error: {e}"),
+    }
+    std::future::ready(Ok(LoopCtrl::Continue))
 }
 
 #[async_trait]
@@ -214,6 +318,54 @@ impl MatrixClient for MatrixSdkClient {
         room.send(content).await?;
         Ok(())
     }
+
+    async fn has_own_reaction(
+        &self,
+        room_id: &RoomId,
+        event_id: &EventId,
+        keys: &[&str],
+    ) -> anyhow::Result<bool> {
+        has_own_reaction(&self.client, room_id, event_id, keys).await
+    }
+}
+
+/// Check whether `client`'s own user has reacted to `event_id` with any of
+/// `keys`. matrix-sdk 0.11 has no `Room::event_relations`, so this uses the
+/// raw ruma endpoint `GET /rooms/{roomId}/relations/{eventId}/m.annotation`.
+///
+/// Returns `Ok(false)` when the client has no logged-in user.
+async fn has_own_reaction(
+    client: &Client,
+    room_id: &RoomId,
+    event_id: &EventId,
+    keys: &[&str],
+) -> anyhow::Result<bool> {
+    let Some(user_id) = client.user_id() else {
+        return Ok(false);
+    };
+
+    let request = get_relating_events_with_rel_type::v1::Request::new(
+        room_id.to_owned(),
+        event_id.to_owned(),
+        RelationType::Annotation,
+    );
+    let response = client.send(request).await?;
+
+    for raw in response.chunk {
+        let Ok(AnyMessageLikeEvent::Reaction(reaction)) = raw.deserialize() else {
+            continue;
+        };
+        if reaction.sender() != user_id {
+            continue;
+        }
+        let Some(original) = reaction.as_original() else {
+            continue;
+        };
+        if keys.contains(&original.content.relates_to.key.as_str()) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn on_stripped_state_member(
@@ -335,6 +487,17 @@ async fn handle_gpx_file(
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("gpx"))
     {
+        return;
+    }
+
+    // Skip messages the bot already handled (any own ✅/❌ reaction),
+    // before paying for the media download. On an error, proceed anyway:
+    // the server-side dedup makes a re-upload a no-op.
+    if matches!(
+        has_own_reaction(client, room.room_id(), event_id, &["✅", "❌"]).await,
+        Ok(true)
+    ) {
+        tracing::info!("Skipping {filename}: bot already reacted to {}", event_id);
         return;
     }
 
@@ -491,10 +654,11 @@ mod tests {
             },
         },
     };
+    use matrix_sdk::{LoopCtrl, sync::SyncResponse};
 
     use super::{
-        COMMAND_REPLY_TEXT, build_command_reply, is_link_command, is_mentioned,
-        within_response_window,
+        COMMAND_REPLY_TEXT, build_command_reply, is_link_command, is_mentioned, persist_next_batch,
+        persist_sync_token, read_sync_token, within_response_window,
     };
 
     fn user_id(id: &str) -> OwnedUserId {
@@ -520,6 +684,53 @@ mod tests {
             origin_server_ts: MilliSecondsSinceUnixEpoch::now(),
             unsigned: MessageLikeUnsigned::new(),
         }
+    }
+
+    #[test]
+    fn read_sync_token_returns_none_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sync-token.txt");
+        assert_eq!(read_sync_token(&path), None);
+    }
+
+    #[test]
+    fn persist_sync_token_creates_file_and_reads_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tokens").join("sync-token.txt");
+        persist_sync_token(&path, "s7259_1").unwrap();
+
+        assert_eq!(path.metadata().unwrap().len(), "s7259_1".len() as u64);
+        assert_eq!(read_sync_token(&path).as_deref(), Some("s7259_1"));
+    }
+
+    #[test]
+    fn read_sync_token_trims_whitespace() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sync-token.txt");
+        std::fs::write(&path, "s7259_1\n").unwrap();
+        assert_eq!(read_sync_token(&path).as_deref(), Some("s7259_1"));
+    }
+
+    #[test]
+    fn read_sync_token_returns_none_for_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sync-token.txt");
+        std::fs::write(&path, "\n").unwrap();
+        assert_eq!(read_sync_token(&path), None);
+    }
+
+    #[tokio::test]
+    async fn persist_next_batch_writes_token_and_continues() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sync-token.txt");
+        let response = SyncResponse {
+            next_batch: "s7259_2".to_owned(),
+            ..SyncResponse::default()
+        };
+
+        let ctrl = persist_next_batch(&path, Ok(response)).await.unwrap();
+        assert_eq!(ctrl, LoopCtrl::Continue);
+        assert_eq!(read_sync_token(&path).as_deref(), Some("s7259_2"));
     }
 
     #[test]

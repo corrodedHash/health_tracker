@@ -31,7 +31,7 @@ pub use error::DbError;
 pub use migrate::run_migrations;
 pub use repo::{SessionChild, SqlxRepository};
 pub use traits::{
-    ApiTokenRepository, CoreRepository, HeartrateRepository, OidcStateRepository,
+    ApiTokenRepository, CoreRepository, HeartrateRepository, InsertRunOutcome, OidcStateRepository,
     PendingLinkRepository, RunningRepository, SessionsRepository, UsersRepository,
     WeightRepository,
 };

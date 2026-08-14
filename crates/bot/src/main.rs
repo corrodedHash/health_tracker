@@ -15,7 +15,7 @@ use health_bot::api_client::{
 use health_bot::gpx::process_gpx;
 use health_bot::links::LinksStore;
 use health_bot::matrix_auth::MatrixLoginConfig;
-use health_bot::matrix_client::{BotEvent, MatrixClient, MatrixSdkClient};
+use health_bot::matrix_client::{BotEvent, GpxFileMetadata, MatrixClient, MatrixSdkClient};
 use matrix_sdk::ruma::{OwnedEventId, OwnedRoomId};
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -32,6 +32,7 @@ struct MatrixSection {
     user_id: String,
     password: String,
     session_file: PathBuf,
+    sync_token: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,7 +85,12 @@ async fn main() -> anyhow::Result<()> {
         password: cfg.matrix.password.clone(),
     };
 
-    let matrix_client = MatrixSdkClient::new(&matrix_login, &cfg.matrix.session_file).await?;
+    let matrix_client = MatrixSdkClient::new(
+        &matrix_login,
+        &cfg.matrix.session_file,
+        &cfg.matrix.sync_token,
+    )
+    .await?;
     let event_sender = matrix_client.event_sender();
 
     let api_config = ApiConfig {
@@ -141,12 +147,27 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Outcome of [`process_gpx_message`]: [`GpxOutcome::Unauthorized`] means
+/// the API rejected the token with HTTP 401, so the caller must drop the
+/// stale token from its link store. The function itself sends the
+/// reply+reaction; token removal lives outside so unit tests only need
+/// matrix/api mocks.
+enum GpxOutcome {
+    /// Upload completed — or was skipped, or failed with a non-auth error.
+    Done,
+    /// The API rejected the token; caller should drop it from the link store.
+    Unauthorized,
+}
+
+/// Handle a [`BotEvent::GpxFile`]: look up the sender's linked API token,
+/// delegate the upload to [`process_gpx_message`], and remove the token
+/// if the API rejects it as unauthorized.
 async fn handle_gpx_event(
     api: &ReqwestApiClient,
     links_store: &Arc<tokio::sync::Mutex<LinksStore>>,
     matrix: &dyn MatrixClient,
     bytes: &[u8],
-    metadata: &health_bot::matrix_client::GpxFileMetadata,
+    metadata: &GpxFileMetadata,
 ) {
     let sender = metadata.sender.to_string();
     let token = {
@@ -164,8 +185,50 @@ async fn handle_gpx_event(
         return;
     };
 
+    if matches!(
+        process_gpx_message(matrix, api, &token, bytes, metadata).await,
+        GpxOutcome::Unauthorized
+    ) {
+        let _ = links_store.lock().await.remove_token(&sender);
+    }
+}
+
+/// Testable GPX handler: skip already-acknowledged messages (client-side
+/// idempotency — Phase 2), then upload + reply + react. Returns
+/// [`GpxOutcome::Unauthorized`] only when the upload is rejected with 401,
+/// so the production caller can drop the stale token; token removal
+/// itself lives outside this function so unit tests can stub matrix/api
+/// without dragging in the link store.
+async fn process_gpx_message(
+    matrix: &dyn MatrixClient,
+    api: &dyn ApiClient,
+    token: &str,
+    bytes: &[u8],
+    metadata: &GpxFileMetadata,
+) -> GpxOutcome {
     tracing::info!("Processing GPX file: {}", metadata.filename);
-    match handle_gpx(api, &token, bytes).await {
+
+    match matrix
+        .has_own_reaction(&metadata.room_id, &metadata.event_id, &["✅", "❌"])
+        .await
+    {
+        Ok(true) => {
+            tracing::info!(
+                "Skipping {}: bot already reacted to {}",
+                metadata.filename,
+                metadata.event_id
+            );
+            return GpxOutcome::Done;
+        }
+        Ok(false) => {}
+        Err(e) => tracing::warn!(
+            "Could not check reactions for {} ({}): {e:#}, proceeding anyway",
+            metadata.event_id,
+            metadata.filename
+        ),
+    }
+
+    match handle_gpx(api, token, bytes).await {
         Ok(()) => {
             if let Ok(result) = process_gpx(bytes) {
                 let (plain, html) = format_gpx_result(&result);
@@ -176,13 +239,13 @@ async fn handle_gpx_event(
             let _ = matrix
                 .send_reaction(&metadata.room_id, &metadata.event_id, "✅")
                 .await;
+            GpxOutcome::Done
         }
         Err(e) => {
             tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
             if e.downcast_ref::<ApiError>()
                 .is_some_and(ApiError::is_unauthorized)
             {
-                let _ = links_store.lock().await.remove_token(&sender);
                 let _ = matrix
                     .send_text_reply(
                         &metadata.room_id,
@@ -190,14 +253,19 @@ async fn handle_gpx_event(
                         "Your API token is invalid or revoked — reply `link` to re-link.",
                     )
                     .await;
+                let _ = matrix
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                    .await;
+                GpxOutcome::Unauthorized
             } else {
                 let _ = matrix
                     .send_text_reply(&metadata.room_id, &metadata.event_id, &format!("{e:#}"))
                     .await;
+                let _ = matrix
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                    .await;
+                GpxOutcome::Done
             }
-            let _ = matrix
-                .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
-                .await;
         }
     }
 }
@@ -419,7 +487,7 @@ fn format_gpx_result(r: &health_bot::gpx::GpxResult) -> (String, String) {
     (plain, html)
 }
 
-async fn handle_gpx<A: ApiClient>(api: &A, token: &str, bytes: &[u8]) -> anyhow::Result<()> {
+async fn handle_gpx(api: &dyn ApiClient, token: &str, bytes: &[u8]) -> anyhow::Result<()> {
     let result = process_gpx(bytes)?;
     let id = api
         .post_run_gpx(
@@ -445,8 +513,160 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, unsafe_code)]
 
     use std::env;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use super::load_config;
+    use super::{load_config, process_gpx_message};
+    use health_bot::api_client::ApiClient;
+    use health_bot::matrix_client::{BotEvent, GpxFileMetadata, MatrixClient};
+
+    struct CountingMatrix {
+        has_own_reaction: bool,
+        reaction_sent: Arc<AtomicBool>,
+    }
+
+    #[async_trait::async_trait]
+    impl MatrixClient for CountingMatrix {
+        async fn wait_for_event(&self) -> anyhow::Result<BotEvent> {
+            anyhow::bail!("wait_for_event must not be called in unit tests")
+        }
+
+        async fn send_text_reply(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _text: &str,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_html_reply(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _plain: &str,
+            _html: &str,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_reaction(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _key: &str,
+        ) -> anyhow::Result<()> {
+            self.reaction_sent.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn has_own_reaction(
+            &self,
+            _room_id: &matrix_sdk::ruma::RoomId,
+            _event_id: &matrix_sdk::ruma::EventId,
+            _keys: &[&str],
+        ) -> anyhow::Result<bool> {
+            Ok(self.has_own_reaction)
+        }
+    }
+
+    struct CountingApi {
+        post_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl ApiClient for CountingApi {
+        async fn post_run_gpx(
+            &self,
+            _token: &str,
+            _bytes: &[u8],
+            _started_at: chrono::DateTime<chrono::Utc>,
+            _distance_m: f64,
+            _duration: std::time::Duration,
+        ) -> anyhow::Result<uuid::Uuid> {
+            self.post_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(uuid::Uuid::new_v4())
+        }
+
+        async fn create_link(&self) -> anyhow::Result<health_bot::api_client::LinkInfo> {
+            anyhow::bail!("create_link must not be called in unit tests")
+        }
+
+        async fn poll_link(&self, _code: &str) -> anyhow::Result<health_bot::api_client::LinkPoll> {
+            anyhow::bail!("poll_link must not be called in unit tests")
+        }
+    }
+
+    fn metadata() -> GpxFileMetadata {
+        GpxFileMetadata {
+            filename: "run.gpx".into(),
+            sender: matrix_sdk::ruma::UserId::parse("@test:example.com").unwrap(),
+            room_id: matrix_sdk::ruma::RoomId::parse("!room:example.com").unwrap(),
+            event_id: matrix_sdk::ruma::EventId::parse("$event:example.com").unwrap(),
+        }
+    }
+
+    #[tokio::test]
+    async fn already_reacted_message_is_skipped_before_upload() {
+        let post_calls = Arc::new(AtomicUsize::new(0));
+        let reaction_sent = Arc::new(AtomicBool::new(false));
+        let matrix = CountingMatrix {
+            has_own_reaction: true,
+            reaction_sent: reaction_sent.clone(),
+        };
+        let api = CountingApi {
+            post_calls: post_calls.clone(),
+        };
+
+        process_gpx_message(&matrix, &api, "any-token", b"<gpx>", &metadata()).await;
+
+        assert_eq!(
+            post_calls.load(Ordering::SeqCst),
+            0,
+            "a message the bot already reacted to must not be re-uploaded"
+        );
+        assert!(
+            !reaction_sent.load(Ordering::SeqCst),
+            "no reply/reaction should be sent for a skipped message"
+        );
+    }
+
+    #[tokio::test]
+    async fn unreacted_message_is_uploaded() {
+        let post_calls = Arc::new(AtomicUsize::new(0));
+        let reaction_sent = Arc::new(AtomicBool::new(false));
+        let matrix = CountingMatrix {
+            has_own_reaction: false,
+            reaction_sent: reaction_sent.clone(),
+        };
+        let api = CountingApi {
+            post_calls: post_calls.clone(),
+        };
+
+        process_gpx_message(&matrix, &api, "any-token", MINIMAL_GPX, &metadata()).await;
+
+        assert_eq!(
+            post_calls.load(Ordering::SeqCst),
+            1,
+            "an unreacted GPX message must be uploaded"
+        );
+        assert!(
+            reaction_sent.load(Ordering::SeqCst),
+            "success reaction should be sent"
+        );
+    }
+
+    const MINIMAL_GPX: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="health-tracker-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><time>2026-07-16T08:00:00Z</time></metadata>
+  <trk>
+    <trkseg>
+      <trkpt lat="50.0" lon="6.0"><time>2026-07-16T08:00:00Z</time></trkpt>
+      <trkpt lat="50.009" lon="6.009"><time>2026-07-16T08:05:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
+"#;
 
     #[test]
     fn env_vars_override_file_defaults() {
@@ -462,6 +682,7 @@ homeserver = "https://file.example.com"
 user_id = "@file:example.com"
 password = "file-password"
 session_file = "file-session.toml"
+sync_token = "file-sync-token.txt"
 
 [api]
 base_url = "http://file:3000"
@@ -479,6 +700,7 @@ token = "file-token"
             env::set_var("HEALTH__MATRIX__USER_ID", "@bot:matrix.example.com");
             env::set_var("HEALTH__MATRIX__PASSWORD", "env-password");
             env::set_var("HEALTH__MATRIX__SESSION_FILE", "env-session.toml");
+            env::set_var("HEALTH__MATRIX__SYNC_TOKEN", "env-sync-token.txt");
             env::set_var("HEALTH__API__BASE_URL", "http://web:3000");
             env::set_var("HEALTH__API__TOKEN", "env-token");
         }
@@ -491,6 +713,7 @@ token = "file-token"
             env::remove_var("HEALTH__MATRIX__USER_ID");
             env::remove_var("HEALTH__MATRIX__PASSWORD");
             env::remove_var("HEALTH__MATRIX__SESSION_FILE");
+            env::remove_var("HEALTH__MATRIX__SYNC_TOKEN");
             env::remove_var("HEALTH__API__BASE_URL");
             env::remove_var("HEALTH__API__TOKEN");
         }
@@ -503,6 +726,10 @@ token = "file-token"
         assert_eq!(
             config.matrix.session_file.to_str(),
             Some("env-session.toml")
+        );
+        assert_eq!(
+            config.matrix.sync_token.to_str(),
+            Some("env-sync-token.txt")
         );
         assert_eq!(config.api.base_url, "http://web:3000");
         assert_eq!(config.api.token, "env-token");

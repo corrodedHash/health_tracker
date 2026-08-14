@@ -16,9 +16,9 @@ use health_core::{
     NewHeartrateSamples, NewOidcState, RunningSession, WeightSession,
 };
 use health_db::{
-    ApiTokenRepository, CoreRepository, DbError, HeartrateRepository, OidcStateRepository,
-    RunningRepository, SessionChild, SessionsRepository, SqlxRepository, UsersRepository,
-    WeightRepository,
+    ApiTokenRepository, CoreRepository, DbError, HeartrateRepository, InsertRunOutcome,
+    OidcStateRepository, RunningRepository, SessionChild, SessionsRepository, SqlxRepository,
+    UsersRepository, WeightRepository,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -305,6 +305,194 @@ async fn running_insert_get_and_gpx_blob(pool: PgPool) {
     };
     RunningRepository::insert(&r, s2.id, &row2).await.unwrap();
     assert_eq!(RunningRepository::get_gpx(&r, s2.id).await.unwrap(), None);
+}
+
+const fn new_run(distance_m: i32, gpx_data: Option<Vec<u8>>) -> RunningSession {
+    RunningSession {
+        session_id: Uuid::nil(),
+        distance_m,
+        moving_distance_m: Some(distance_m),
+        moving_time: Some(1800.0),
+        gpx_data,
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_same_bytes_is_duplicate(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let new = new_session(ExerciseKind::Running);
+    let run = new_run(5_000, Some(b"<gpx>same bytes</gpx>".to_vec()));
+
+    let first = RunningRepository::insert_run_with_gpx(&r, uid, &new, &run)
+        .await
+        .unwrap();
+    let InsertRunOutcome::Created(first) = first else {
+        panic!("first insert of fresh bytes should be Created");
+    };
+
+    let second = RunningRepository::insert_run_with_gpx(&r, uid, &new, &run)
+        .await
+        .unwrap();
+    let InsertRunOutcome::Duplicate(dup) = second else {
+        panic!("re-insert of identical bytes should be Duplicate");
+    };
+    assert_eq!(first.id, dup.id);
+
+    let listed =
+        SessionsRepository::list(&r, uid, Some(ExerciseKind::Running), None, None, None, None)
+            .await
+            .unwrap();
+    assert_eq!(listed.len(), 1);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_cross_user_same_bytes_is_created(pool: PgPool) {
+    let r = repo(pool);
+    let uid_a = UsersRepository::upsert_by_external_id(&r, "sub-a", Some("Alice"))
+        .await
+        .unwrap()
+        .id;
+    let uid_b = UsersRepository::upsert_by_external_id(&r, "sub-b", Some("Bob"))
+        .await
+        .unwrap()
+        .id;
+    assert_ne!(uid_a, uid_b);
+
+    let new = new_session(ExerciseKind::Running);
+    let run = new_run(5_000, Some(b"<gpx>shared bytes</gpx>".to_vec()));
+
+    let a = RunningRepository::insert_run_with_gpx(&r, uid_a, &new, &run)
+        .await
+        .unwrap();
+    assert!(matches!(a, InsertRunOutcome::Created(_)));
+
+    let b = RunningRepository::insert_run_with_gpx(&r, uid_b, &new, &run)
+        .await
+        .unwrap();
+    assert!(
+        matches!(b, InsertRunOutcome::Created(_)),
+        "the same GPX bytes are deduped per user, not globally"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_same_second_same_distance_is_duplicate(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let new = new_session(ExerciseKind::Running);
+    let first = RunningRepository::insert_run_with_gpx(
+        &r,
+        uid,
+        &new,
+        &new_run(5_000, Some(b"<gpx>version a</gpx>".to_vec())),
+    )
+    .await
+    .unwrap();
+    let InsertRunOutcome::Created(first) = first else {
+        panic!("first insert should be Created");
+    };
+
+    let second = RunningRepository::insert_run_with_gpx(
+        &r,
+        uid,
+        &new,
+        &new_run(5_000, Some(b"<gpx>version b (re-encoded)</gpx>".to_vec())),
+    )
+    .await
+    .unwrap();
+    let InsertRunOutcome::Duplicate(dup) = second else {
+        panic!("re-encoded file with same started_at/distance should be Duplicate");
+    };
+    assert_eq!(first.id, dup.id);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_same_bytes_different_started_at_is_duplicate(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let mut first_new = new_session(ExerciseKind::Running);
+    first_new.started_at = DateTime::parse_from_rfc3339("2026-07-16T08:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let mut second_new = new_session(ExerciseKind::Running);
+    second_new.started_at = DateTime::parse_from_rfc3339("2026-07-17T08:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let first = RunningRepository::insert_run_with_gpx(
+        &r,
+        uid,
+        &first_new,
+        &new_run(5_000, Some(b"<gpx>unique run</gpx>".to_vec())),
+    )
+    .await
+    .unwrap();
+    let InsertRunOutcome::Created(first) = first else {
+        panic!("first insert should be Created");
+    };
+
+    let second = RunningRepository::insert_run_with_gpx(
+        &r,
+        uid,
+        &second_new,
+        &new_run(5_000, Some(b"<gpx>unique run</gpx>".to_vec())),
+    )
+    .await
+    .unwrap();
+    let InsertRunOutcome::Duplicate(dup) = second else {
+        panic!(
+            "identical bytes are deduped on content hash, started_at is derived from the bytes anyway"
+        );
+    };
+    assert_eq!(first.id, dup.id);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_without_gpx_always_creates(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let new = new_session(ExerciseKind::Running);
+    let run = new_run(5_000, None);
+
+    let first = RunningRepository::insert_run_with_gpx(&r, uid, &new, &run)
+        .await
+        .unwrap();
+    assert!(matches!(first, InsertRunOutcome::Created(_)));
+
+    let second = RunningRepository::insert_run_with_gpx(&r, uid, &new, &run)
+        .await
+        .unwrap();
+    assert!(
+        matches!(second, InsertRunOutcome::Created(_)),
+        "GPX-less runs are never deduplicated"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn insert_run_with_gpx_byte_fallback_hits_legacy_row(pool: PgPool) {
+    let r = repo(pool);
+    let uid = make_user(&r).await;
+
+    let new = new_session(ExerciseKind::Running);
+    let gpx = b"<gpx>legacy row</gpx>".to_vec();
+
+    let s = SessionsRepository::insert(&r, uid, &new).await.unwrap();
+    RunningRepository::insert(&r, s.id, &new_run(5_000, Some(gpx.clone())))
+        .await
+        .unwrap();
+
+    let outcome = RunningRepository::insert_run_with_gpx(&r, uid, &new, &new_run(5_000, Some(gpx)))
+        .await
+        .unwrap();
+    let InsertRunOutcome::Duplicate(dup) = outcome else {
+        panic!("pre-hash legacy row should be caught by byte-comparison fallback");
+    };
+    assert_eq!(dup.id, s.id);
 }
 
 // ---------------------------------------------------------------------------

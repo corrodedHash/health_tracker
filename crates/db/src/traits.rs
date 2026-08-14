@@ -74,12 +74,32 @@ pub trait CoreRepository: Send + Sync {
     async fn get_by_session(&self, session_id: Uuid) -> Result<CoreSession, DbError>;
 }
 
+/// Outcome of a GPX-backed run insert.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InsertRunOutcome {
+    /// The run was stored as a brand-new row.
+    Created(ExerciseSession),
+    /// The GPX bytes (or a same-second, same-distance near-duplicate)
+    /// already exist for this user; the pre-existing session is returned.
+    Duplicate(ExerciseSession),
+}
+
 /// `exercise_running` rows.
 #[async_trait::async_trait]
 pub trait RunningRepository: Send + Sync {
     /// Insert a running child row. Setting `gpx_data` is optional
     /// (some runs are uploaded without a GPX trace).
     async fn insert(&self, session_id: Uuid, row: &RunningSession) -> Result<(), DbError>;
+
+    /// Insert a parent + running child in one transaction, deduplicating
+    /// by `gpx_data` content hash (falling back to byte comparison for
+    /// legacy rows that predate `gpx_sha256`). GPX-less runs skip dedup.
+    async fn insert_run_with_gpx(
+        &self,
+        user_id: Uuid,
+        new: &NewExerciseSession,
+        running: &RunningSession,
+    ) -> Result<InsertRunOutcome, DbError>;
 
     /// Child row without the `gpx_data` blob; use [`Self::get_gpx`]
     /// for the bytes.
