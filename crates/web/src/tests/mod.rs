@@ -34,8 +34,10 @@ fn test_state() -> crate::state::AppState {
             static_dir: None,
             oidc: None,
             frontend_url: None,
+            public_base_url: None,
             dev_auto_login: false,
             cookie_secure: false,
+            link_ttl_minutes: 5,
         },
         cookie_key: cookie_key(),
         oidc_bundle: None,
@@ -237,8 +239,10 @@ fn state_with_pool(pool: sqlx::PgPool) -> crate::state::AppState {
             static_dir: None,
             oidc: None,
             frontend_url: None,
+            public_base_url: None,
             dev_auto_login: false,
             cookie_secure: false,
+            link_ttl_minutes: 5,
         },
         cookie_key: cookie_key(),
         oidc_bundle: None,
@@ -286,4 +290,81 @@ async fn upload_gpx_same_file_returns_201_then_200(pool: sqlx::PgPool) {
         first_id,
         "duplicate upload must return the same session"
     );
+}
+
+#[tokio::test]
+async fn create_link_requires_bearer_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links")
+        .method("POST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn poll_link_requires_bearer_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links/abc123")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn confirm_link_requires_session() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/links/abc123/confirm")
+        .method("POST")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn import_sessions_requires_bearer_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/import/sessions")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("[]"))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn import_sessions_rejects_unknown_token() {
+    let state = test_state();
+    let app = crate::routes::build_router(state);
+
+    let req = Request::builder()
+        .uri("/api/import/sessions")
+        .method("POST")
+        .header(header::AUTHORIZATION, "Bearer definitely-not-a-token")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("[]"))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

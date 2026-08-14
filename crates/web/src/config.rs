@@ -12,14 +12,24 @@ pub struct Config {
     pub static_dir: Option<String>,
     pub oidc: Option<OidcConfig>,
     pub frontend_url: Option<String>,
+    /// Public origin used to build browser-facing URLs (e.g. the account
+    /// link page). Falls back to `frontend_url`, then to the request Host.
+    pub public_base_url: Option<String>,
     #[serde(default)]
     pub dev_auto_login: bool,
     #[serde(default = "default_cookie_secure")]
     pub cookie_secure: bool,
+    /// How long a bot-initiated account link stays valid before it expires.
+    #[serde(default = "default_link_ttl_minutes")]
+    pub link_ttl_minutes: i64,
 }
 
 const fn default_cookie_secure() -> bool {
     true
+}
+
+const fn default_link_ttl_minutes() -> i64 {
+    5
 }
 
 fn default_listen_addr() -> String {

@@ -9,6 +9,7 @@ import { RunningPaceChart } from "@/components/running-pace-chart";
 import { RunningDistanceChart } from "@/components/running-distance-chart";
 import { CalendarHeatmap } from "@/components/calendar-heatmap";
 import { ApiTokenCard } from "@/components/api-token-card";
+import { LinkPage } from "@/components/link-page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkAuth } from "@/lib/api";
@@ -25,6 +26,12 @@ function useResumeToken() {
 
     if (!data) {
       window.history.replaceState({}, "", "/");
+      return;
+    }
+
+    const redirect = parseLinkResume(data);
+    if (redirect) {
+      window.location.assign(redirect);
       return;
     }
 
@@ -65,6 +72,24 @@ function useResumeToken() {
   }, [qc]);
 }
 
+function parseLinkResume(data: string): string | null {
+  if (!data.startsWith("{")) return null;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "link" in parsed &&
+      typeof (parsed as { link: unknown }).link === "string"
+    ) {
+      return (parsed as { link: string }).link;
+    }
+  } catch {
+    // not a JSON resume payload
+  }
+  return null;
+}
+
 export default function App() {
   useResumeToken();
   const [activeTab, setActiveTab] = useState<"dashboard" | "graphs" | "settings">("dashboard");
@@ -87,6 +112,10 @@ export default function App() {
   });
 
   const logoutClick = useCallback(() => logout.mutate(), [logout]);
+
+  if (window.location.pathname.startsWith("/link")) {
+    return <LinkPage />;
+  }
 
   if (authQ.isPending) {
     return (

@@ -1,6 +1,11 @@
 amends "package://github.com/jdx/hk/releases/download/v1.51.0/hk@1.51.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.51.0/hk@1.51.0#/Builtins.pkl"
 
+# The cargo steps use `Cargo.lock` (present only at the workspace root) as the
+# workspace indicator so hk resolves every crate to the single real workspace,
+# instead of the nearest member `Cargo.toml` (which would scope `cargo test` /
+# `cargo clippy` to one crate and break bin-only crates like `health-web`).
+
 local all_steps = new Mapping<String, Step> {
   ["check-migrations"] {
     check = "./tools/checks/check-migrations.sh"
@@ -8,18 +13,30 @@ local all_steps = new Mapping<String, Step> {
   ["cargo-fmt"] = Builtins.cargo_fmt
   ["cargo-clippy"] {
     glob = "**/*.rs"
-    workspace_indicator = "Cargo.toml"
-    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
-    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+    workspace_indicator = "Cargo.lock"
+    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml -- -D warnings"
+    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml --fix --allow-dirty --allow-staged -- -D warnings"
     check_first = false
     env {
       ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+      ["SQLX_OFFLINE"] = "true"
     }
   }
   ["cargo-test"] {
     glob = "**/*.rs"
-    workspace_indicator = "Cargo.toml"
-    check = "cargo test --all-features --manifest-path {{workspace_indicator}} --quiet"
+    workspace_indicator = "Cargo.lock"
+    # Unit + binary tests only: integration tests are skipped by default because
+    # crates/db/tests (repo_integration.rs) spins up real Postgres via
+    # `#[sqlx::test]`; those run in CI and `mise run test` against a live database.
+    #
+    # The bot's integration tests, however, need no database (wiremock mock server
+    # and GPX fixtures only), so they are explicitly re-included here. If you add a
+    # new integration test that does NOT require a database, add its target name
+    # (file under crates/*/tests/) to the `--test` list below.
+    check = "cargo test --all-features --manifest-path {{workspace}}/Cargo.toml --quiet --lib --bins --test api_client --test process_gpx"
+    env {
+      ["SQLX_OFFLINE"] = "true"
+    }
   }
   ["frontend-lint"] {
     glob = "frontend/src/**/*.{ts,tsx}"
@@ -43,12 +60,13 @@ local pre_commit_steps = new Mapping<String, Step> {
   ["cargo-fmt"] = Builtins.cargo_fmt
   ["cargo-clippy"] {
     glob = "**/*.rs"
-    workspace_indicator = "Cargo.toml"
-    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
-    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+    workspace_indicator = "Cargo.lock"
+    check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml -- -D warnings"
+    fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml --fix --allow-dirty --allow-staged -- -D warnings"
     check_first = false
     env {
       ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+      ["SQLX_OFFLINE"] = "true"
     }
   }
   ["frontend-lint"] {
@@ -75,12 +93,13 @@ hooks {
       ["cargo-fmt"] = Builtins.cargo_fmt
       ["cargo-clippy"] {
         glob = "**/*.rs"
-        workspace_indicator = "Cargo.toml"
-        check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} -- -D warnings"
-        fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace_indicator}} --fix --allow-dirty --allow-staged -- -D warnings"
+        workspace_indicator = "Cargo.lock"
+        check = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml -- -D warnings"
+        fix = "cargo clippy --quiet --all-targets --all-features --manifest-path {{workspace}}/Cargo.toml --fix --allow-dirty --allow-staged -- -D warnings"
         check_first = false
         env {
           ["CARGO_TERM_PROGRESS_WHEN"] = "never"
+          ["SQLX_OFFLINE"] = "true"
         }
       }
       ["frontend-lint"] {

@@ -1,6 +1,8 @@
 pub mod auth;
 pub mod core;
 pub mod heartrate;
+pub mod import;
+pub mod links;
 pub mod openapi;
 pub mod running;
 pub mod runs;
@@ -50,10 +52,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/runs/{id}/gpx", routing::get(runs::get_gpx))
         .route("/tokens", routing::get(tokens::list).post(tokens::issue))
         .route("/tokens/{id}", routing::delete(tokens::revoke))
+        .route("/links/{code}/confirm", routing::post(links::confirm))
         .layer(session_layer);
 
     let bearer_routes = Router::new()
         .route("/runs/gpx", routing::post(runs::upload_gpx))
+        .route("/import/sessions", routing::post(import::import))
+        .route("/links", routing::post(links::create))
+        .route("/links/{code}", routing::get(links::poll))
         .layer(bearer_layer);
 
     let auth_routes = Router::new()

@@ -29,8 +29,9 @@ pub mod traits;
 
 pub use error::DbError;
 pub use migrate::run_migrations;
-pub use repo::SqlxRepository;
+pub use repo::{SessionChild, SqlxRepository};
 pub use traits::{
     ApiTokenRepository, CoreRepository, HeartrateRepository, InsertRunOutcome, OidcStateRepository,
-    RunningRepository, SessionsRepository, UsersRepository, WeightRepository,
+    PendingLinkRepository, RunningRepository, SessionsRepository, UsersRepository,
+    WeightRepository,
 };

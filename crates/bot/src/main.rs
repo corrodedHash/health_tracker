@@ -1,17 +1,24 @@
 //! `health-bot` binary entry point (item 5.27).
 //!
 //! Loads layered config, builds the matrix + API clients, and runs the
-//! sync loop. Each GPX file received via Matrix is parsed, computed,
-//! and uploaded to the web API.
+//! sync loop. GPX files received via Matrix are uploaded to the web API
+//! using the sender's linked API token; a `link` command starts the
+//! browser-confirmation flow that issues that token.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
-use health_bot::api_client::{ApiClient, ApiConfig, ReqwestApiClient};
+use health_bot::api_client::{
+    ApiClient, ApiConfig, ApiError, LinkPoll, LinkStatus, ReqwestApiClient,
+};
 use health_bot::gpx::process_gpx;
+use health_bot::links::LinksStore;
 use health_bot::matrix_auth::MatrixLoginConfig;
-use health_bot::matrix_client::{GpxFileMetadata, MatrixClient, MatrixSdkClient};
+use health_bot::matrix_client::{BotEvent, GpxFileMetadata, MatrixClient, MatrixSdkClient};
+use matrix_sdk::ruma::{OwnedEventId, OwnedRoomId};
 use serde::Deserialize;
+use tokio::sync::mpsc;
 
 #[derive(Debug, Deserialize)]
 struct BotConfig {
@@ -32,6 +39,19 @@ struct MatrixSection {
 struct ApiSection {
     base_url: String,
     token: String,
+    #[serde(default = "default_links_file")]
+    links_file: PathBuf,
+    /// How long to keep polling a link before giving up (minutes).
+    #[serde(default = "default_link_poll_timeout_minutes")]
+    link_poll_timeout_minutes: u64,
+}
+
+fn default_links_file() -> PathBuf {
+    PathBuf::from("links.toml")
+}
+
+const fn default_link_poll_timeout_minutes() -> u64 {
+    5
 }
 
 fn load_config() -> anyhow::Result<BotConfig> {
@@ -65,12 +85,13 @@ async fn main() -> anyhow::Result<()> {
         password: cfg.matrix.password.clone(),
     };
 
-    let mut matrix_client = MatrixSdkClient::new(
+    let matrix_client = MatrixSdkClient::new(
         &matrix_login,
         &cfg.matrix.session_file,
         &cfg.matrix.sync_token,
     )
     .await?;
+    let event_sender = matrix_client.event_sender();
 
     let api_config = ApiConfig {
         base_url: cfg.api.base_url.clone(),
@@ -78,25 +99,113 @@ async fn main() -> anyhow::Result<()> {
     };
     let api_client = ReqwestApiClient::new(api_config);
 
-    tracing::info!("health-bot started, waiting for GPX files");
+    let links_store = Arc::new(tokio::sync::Mutex::new(LinksStore::load(
+        &cfg.api.links_file,
+    )));
+    let link_context = LinkContext {
+        store: links_store.clone(),
+        event_sender: event_sender.clone(),
+        poll_timeout: Duration::from_secs(cfg.api.link_poll_timeout_minutes * 60),
+    };
 
-    while let Ok((bytes, metadata)) = matrix_client.wait_for_gpx_file().await {
-        process_gpx_message(&matrix_client, &api_client, &bytes, &metadata).await;
+    tracing::info!("health-bot started, waiting for GPX files and link commands");
+
+    while let Ok(event) = matrix_client.wait_for_event().await {
+        match event {
+            BotEvent::GpxFile { bytes, metadata } => {
+                handle_gpx_event(&api_client, &links_store, &matrix_client, &bytes, &metadata)
+                    .await;
+            }
+            BotEvent::LinkRequest {
+                sender,
+                room_id,
+                event_id,
+            } => {
+                handle_link_request(
+                    &api_client,
+                    &link_context,
+                    &matrix_client,
+                    sender,
+                    room_id,
+                    event_id,
+                )
+                .await;
+            }
+            BotEvent::Reply {
+                room_id,
+                event_id,
+                text,
+            } => {
+                let _ = matrix_client
+                    .send_text_reply(&room_id, &event_id, &text)
+                    .await;
+            }
+        }
     }
 
     tracing::info!("Matrix event channel closed, shutting down");
     Ok(())
 }
 
-/// Handle one GPX message: skip it if the bot already reacted (✅/❌),
-/// otherwise upload + reply + react. Extracted from the `main()` loop so the
-/// reaction-skip logic is testable through the mockable traits.
-async fn process_gpx_message<M: MatrixClient + Sync, A: ApiClient + Sync>(
-    matrix: &M,
-    api: &A,
+/// Outcome of [`process_gpx_message`]: [`GpxOutcome::Unauthorized`] means
+/// the API rejected the token with HTTP 401, so the caller must drop the
+/// stale token from its link store. The function itself sends the
+/// reply+reaction; token removal lives outside so unit tests only need
+/// matrix/api mocks.
+enum GpxOutcome {
+    /// Upload completed — or was skipped, or failed with a non-auth error.
+    Done,
+    /// The API rejected the token; caller should drop it from the link store.
+    Unauthorized,
+}
+
+/// Handle a [`BotEvent::GpxFile`]: look up the sender's linked API token,
+/// delegate the upload to [`process_gpx_message`], and remove the token
+/// if the API rejects it as unauthorized.
+async fn handle_gpx_event(
+    api: &ReqwestApiClient,
+    links_store: &Arc<tokio::sync::Mutex<LinksStore>>,
+    matrix: &dyn MatrixClient,
     bytes: &[u8],
     metadata: &GpxFileMetadata,
 ) {
+    let sender = metadata.sender.to_string();
+    let token = {
+        let guard = links_store.lock().await;
+        guard.token_for(&sender).map(str::to_owned)
+    };
+    let Some(token) = token else {
+        let _ = matrix
+            .send_text_reply(
+                &metadata.room_id,
+                &metadata.event_id,
+                "You haven't linked your account yet — reply `link` to authenticate.",
+            )
+            .await;
+        return;
+    };
+
+    if matches!(
+        process_gpx_message(matrix, api, &token, bytes, metadata).await,
+        GpxOutcome::Unauthorized
+    ) {
+        let _ = links_store.lock().await.remove_token(&sender);
+    }
+}
+
+/// Testable GPX handler: skip already-acknowledged messages (client-side
+/// idempotency — Phase 2), then upload + reply + react. Returns
+/// [`GpxOutcome::Unauthorized`] only when the upload is rejected with 401,
+/// so the production caller can drop the stale token; token removal
+/// itself lives outside this function so unit tests can stub matrix/api
+/// without dragging in the link store.
+async fn process_gpx_message(
+    matrix: &dyn MatrixClient,
+    api: &dyn ApiClient,
+    token: &str,
+    bytes: &[u8],
+    metadata: &GpxFileMetadata,
+) -> GpxOutcome {
     tracing::info!("Processing GPX file: {}", metadata.filename);
 
     match matrix
@@ -109,7 +218,7 @@ async fn process_gpx_message<M: MatrixClient + Sync, A: ApiClient + Sync>(
                 metadata.filename,
                 metadata.event_id
             );
-            return;
+            return GpxOutcome::Done;
         }
         Ok(false) => {}
         Err(e) => tracing::warn!(
@@ -119,7 +228,7 @@ async fn process_gpx_message<M: MatrixClient + Sync, A: ApiClient + Sync>(
         ),
     }
 
-    match handle_gpx(api, bytes).await {
+    match handle_gpx(api, token, bytes).await {
         Ok(()) => {
             if let Ok(result) = process_gpx(bytes) {
                 let (plain, html) = format_gpx_result(&result);
@@ -130,16 +239,192 @@ async fn process_gpx_message<M: MatrixClient + Sync, A: ApiClient + Sync>(
             let _ = matrix
                 .send_reaction(&metadata.room_id, &metadata.event_id, "✅")
                 .await;
+            GpxOutcome::Done
         }
         Err(e) => {
             tracing::error!("Failed to handle GPX file {}: {e:#}", metadata.filename);
-            let msg = format!("{e:#}");
+            if e.downcast_ref::<ApiError>()
+                .is_some_and(ApiError::is_unauthorized)
+            {
+                let _ = matrix
+                    .send_text_reply(
+                        &metadata.room_id,
+                        &metadata.event_id,
+                        "Your API token is invalid or revoked — reply `link` to re-link.",
+                    )
+                    .await;
+                let _ = matrix
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                    .await;
+                GpxOutcome::Unauthorized
+            } else {
+                let _ = matrix
+                    .send_text_reply(&metadata.room_id, &metadata.event_id, &format!("{e:#}"))
+                    .await;
+                let _ = matrix
+                    .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                    .await;
+                GpxOutcome::Done
+            }
+        }
+    }
+}
+
+/// Shared state for a link flow: the token store, the main-loop event
+/// channel, and how long to keep polling before giving up.
+#[derive(Clone)]
+struct LinkContext {
+    store: Arc<tokio::sync::Mutex<LinksStore>>,
+    event_sender: Arc<tokio::sync::Mutex<mpsc::Sender<BotEvent>>>,
+    poll_timeout: Duration,
+}
+
+async fn handle_link_request(
+    api: &ReqwestApiClient,
+    link_ctx: &LinkContext,
+    matrix: &dyn MatrixClient,
+    sender: matrix_sdk::ruma::OwnedUserId,
+    room_id: OwnedRoomId,
+    event_id: OwnedEventId,
+) {
+    let sender_str = sender.to_string();
+    let already_linked = {
+        let guard = link_ctx.store.lock().await;
+        guard.token_for(&sender_str).is_some()
+    };
+    if already_linked {
+        let _ = matrix
+            .send_text_reply(
+                &room_id,
+                &event_id,
+                "You're already linked. Revoke the token in the web UI and reply `link` to re-link.",
+            )
+            .await;
+        return;
+    }
+
+    match api.create_link().await {
+        Ok(link) => {
             let _ = matrix
-                .send_text_reply(&metadata.room_id, &metadata.event_id, &msg)
+                .send_text_reply(
+                    &room_id,
+                    &event_id,
+                    &format!("Authenticate here to link your account: {}", link.url),
+                )
                 .await;
+
+            let api = api.clone();
+            let ctx = link_ctx.clone();
+            let code = link.code.clone();
+            tokio::spawn(async move {
+                poll_link_until_done(&api, ctx, &sender, &room_id, &event_id, &code).await;
+            });
+        }
+        Err(e) => {
+            tracing::error!("Failed to create link: {e:#}");
             let _ = matrix
-                .send_reaction(&metadata.room_id, &metadata.event_id, "❌")
+                .send_text_reply(
+                    &room_id,
+                    &event_id,
+                    &format!("Failed to start linking: {e:#}"),
+                )
                 .await;
+        }
+    }
+}
+
+/// Poll a link until the user accepts (or it expires), then store the
+/// issued token and route a reply back through the main loop. Gives up
+/// after `link_ctx.poll_timeout`, mirroring the server-side link TTL, so a
+/// poll task can never outlive the link — e.g. while the web server is
+/// unreachable.
+async fn poll_link_until_done(
+    api: &ReqwestApiClient,
+    link_ctx: LinkContext,
+    sender: &matrix_sdk::ruma::OwnedUserId,
+    room_id: &OwnedRoomId,
+    event_id: &OwnedEventId,
+    code: &str,
+) {
+    let deadline = tokio::time::Instant::now() + link_ctx.poll_timeout;
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            let _ = link_ctx
+                .event_sender
+                .lock()
+                .await
+                .send(BotEvent::Reply {
+                    room_id: room_id.clone(),
+                    event_id: event_id.clone(),
+                    text: "⌛ Link expired — reply `link` to start a new one.".to_owned(),
+                })
+                .await;
+            return;
+        }
+        interval.tick().await;
+        match api.poll_link(code).await {
+            Ok(LinkPoll {
+                status: LinkStatus::Pending,
+                ..
+            }) => {}
+            Ok(LinkPoll {
+                status: LinkStatus::Accepted,
+                token: Some(token),
+            }) => {
+                let sender_str = sender.to_string();
+                let store_result = {
+                    let mut guard = link_ctx.store.lock().await;
+                    guard.set_token(&sender_str, &token)
+                };
+                let text = match store_result {
+                    Ok(()) => {
+                        "✅ Linked to your account. Send me a .gpx file and I'll add it.".to_owned()
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to persist token for {sender_str}: {e:#}");
+                        "⚠️ Failed to save your link locally — reply `link` to try again."
+                            .to_owned()
+                    }
+                };
+                let _ = link_ctx
+                    .event_sender
+                    .lock()
+                    .await
+                    .send(BotEvent::Reply {
+                        room_id: room_id.clone(),
+                        event_id: event_id.clone(),
+                        text,
+                    })
+                    .await;
+                return;
+            }
+            Ok(LinkPoll {
+                status: LinkStatus::Accepted,
+                token: None,
+            }) => {
+                // A concurrent poll already collected the token.
+                return;
+            }
+            Ok(LinkPoll {
+                status: LinkStatus::Expired,
+                ..
+            }) => {
+                let _ = link_ctx
+                    .event_sender
+                    .lock()
+                    .await
+                    .send(BotEvent::Reply {
+                        room_id: room_id.clone(),
+                        event_id: event_id.clone(),
+                        text: "⌛ Link expired — reply `link` to start a new one.".to_owned(),
+                    })
+                    .await;
+                return;
+            }
+            Err(e) => {
+                tracing::error!("Polling link {code} failed: {e:#}");
+            }
         }
     }
 }
@@ -202,10 +487,11 @@ fn format_gpx_result(r: &health_bot::gpx::GpxResult) -> (String, String) {
     (plain, html)
 }
 
-async fn handle_gpx<A: ApiClient>(api: &A, bytes: &[u8]) -> anyhow::Result<()> {
+async fn handle_gpx(api: &dyn ApiClient, token: &str, bytes: &[u8]) -> anyhow::Result<()> {
     let result = process_gpx(bytes)?;
     let id = api
         .post_run_gpx(
+            token,
             bytes,
             result.started_at,
             result.total_distance_m,
@@ -232,7 +518,7 @@ mod tests {
 
     use super::{load_config, process_gpx_message};
     use health_bot::api_client::ApiClient;
-    use health_bot::matrix_client::{GpxFileMetadata, MatrixClient};
+    use health_bot::matrix_client::{BotEvent, GpxFileMetadata, MatrixClient};
 
     struct CountingMatrix {
         has_own_reaction: bool,
@@ -241,8 +527,8 @@ mod tests {
 
     #[async_trait::async_trait]
     impl MatrixClient for CountingMatrix {
-        async fn wait_for_gpx_file(&mut self) -> anyhow::Result<(Vec<u8>, GpxFileMetadata)> {
-            anyhow::bail!("wait_for_gpx_file must not be called in unit tests")
+        async fn wait_for_event(&self) -> anyhow::Result<BotEvent> {
+            anyhow::bail!("wait_for_event must not be called in unit tests")
         }
 
         async fn send_text_reply(
@@ -292,6 +578,7 @@ mod tests {
     impl ApiClient for CountingApi {
         async fn post_run_gpx(
             &self,
+            _token: &str,
             _bytes: &[u8],
             _started_at: chrono::DateTime<chrono::Utc>,
             _distance_m: f64,
@@ -300,11 +587,20 @@ mod tests {
             self.post_calls.fetch_add(1, Ordering::SeqCst);
             Ok(uuid::Uuid::new_v4())
         }
+
+        async fn create_link(&self) -> anyhow::Result<health_bot::api_client::LinkInfo> {
+            anyhow::bail!("create_link must not be called in unit tests")
+        }
+
+        async fn poll_link(&self, _code: &str) -> anyhow::Result<health_bot::api_client::LinkPoll> {
+            anyhow::bail!("poll_link must not be called in unit tests")
+        }
     }
 
     fn metadata() -> GpxFileMetadata {
         GpxFileMetadata {
             filename: "run.gpx".into(),
+            sender: matrix_sdk::ruma::UserId::parse("@test:example.com").unwrap(),
             room_id: matrix_sdk::ruma::RoomId::parse("!room:example.com").unwrap(),
             event_id: matrix_sdk::ruma::EventId::parse("$event:example.com").unwrap(),
         }
@@ -322,7 +618,7 @@ mod tests {
             post_calls: post_calls.clone(),
         };
 
-        process_gpx_message(&matrix, &api, b"<gpx>", &metadata()).await;
+        process_gpx_message(&matrix, &api, "any-token", b"<gpx>", &metadata()).await;
 
         assert_eq!(
             post_calls.load(Ordering::SeqCst),
@@ -347,7 +643,7 @@ mod tests {
             post_calls: post_calls.clone(),
         };
 
-        process_gpx_message(&matrix, &api, MINIMAL_GPX, &metadata()).await;
+        process_gpx_message(&matrix, &api, "any-token", MINIMAL_GPX, &metadata()).await;
 
         assert_eq!(
             post_calls.load(Ordering::SeqCst),
@@ -437,5 +733,7 @@ token = "file-token"
         );
         assert_eq!(config.api.base_url, "http://web:3000");
         assert_eq!(config.api.token, "env-token");
+        assert_eq!(config.api.links_file.to_str(), Some("links.toml"));
+        assert_eq!(config.api.link_poll_timeout_minutes, 5);
     }
 }

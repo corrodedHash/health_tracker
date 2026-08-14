@@ -55,7 +55,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Check no existing migrations modified
         run: ./tools/checks/check-migrations.sh "${{ github.event.pull_request.base.sha || 'origin/main' }}"
 
@@ -109,3 +109,15 @@ jobs:
       - name: Build (tsc + vite)
         working-directory: frontend
         run: pnpm build
+
+  checks-succeeded:
+    name: Checks Succeeded
+    if: ${{ !cancelled() }}
+    needs: [migrations-immutable, fmt, clippy, test, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required check failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - name: All checks passed
+        run: echo "All required checks passed"

@@ -15,6 +15,17 @@ members = [
     "crates/web",
     "crates/bot",
 ]
+# The root `[package]` above exists only as a version anchor for release-please.
+# Without `default-members`, bare cargo commands (check/clippy/build/test) and
+# `cargo sqlx prepare`'s internal `cargo check` would only target that empty
+# root package instead of the real crates.
+default-members = [
+    "crates/core",
+    "crates/db",
+    "crates/auth",
+    "crates/web",
+    "crates/bot",
+]
 
 [workspace.package]
 version = "0.1.0"

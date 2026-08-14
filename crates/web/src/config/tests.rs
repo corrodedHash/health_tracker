@@ -43,4 +43,5 @@ listen_addr = "0.0.0.0:9999"
     assert_eq!(config.database_url, "postgres://env:5432/db");
     assert_eq!(config.cookie_key, "env-key");
     assert_eq!(config.listen_addr, "0.0.0.0:9999");
+    assert_eq!(config.link_ttl_minutes, 5);
 }
